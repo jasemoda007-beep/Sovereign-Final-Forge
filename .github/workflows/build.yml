@@ -1,0 +1,162 @@
+name: Sovereign-Final-Forge-v90k
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Sovereign Ignition
+        run: |
+          echo "🔥 بدء تشغيل مفاعل البصرة السيادي المطور..."
+          
+          # [1] المفاعل يكتب الكود بنفسه بنسخة مطهرة من التحذيرات
+          cat << 'EOF' > wsam_core.mm
+          #import <UIKit/UIKit.h>
+          #import <mach-o/dyld.h>
+          #import <mach/mach.h>
+          #import <Foundation/Foundation.h>
+
+          // [🎯] إحداثيات مركز القيادة - رابط الجنرال وسام الصافي
+          #define SERVER_API @"http://files.free.nf/wsam_core/dashboard_v50.php?api=true"
+
+          @interface SovereignUI : UIView
+          @property (nonatomic, strong) UILabel *statusLabel;
+          @property (nonatomic, strong) UIView *statusLamp;
+          @end
+
+          @implementation SovereignUI
+          - (instancetype)initWithFrame:(CGRect)frame {
+              self = [super initWithFrame:frame];
+              if (self) {
+                  self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+                  self.layer.cornerRadius = 12;
+                  self.layer.borderColor = [UIColor cyanColor].CGColor;
+                  self.layer.borderWidth = 1.5;
+                  
+                  self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, 170, 20)];
+                  self.statusLabel.text = @"جاري تفعيل الحماية...";
+                  self.statusLabel.textColor = [UIColor yellowColor];
+                  self.statusLabel.font = [UIFont boldSystemFontOfSize:11];
+                  [self addSubview:self.statusLabel];
+                  
+                  self.statusLamp = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width - 25, 10, 15, 15)];
+                  self.statusLamp.backgroundColor = [UIColor yellowColor];
+                  self.statusLamp.layer.cornerRadius = 7.5;
+                  self.statusLamp.layer.shadowColor = [UIColor yellowColor].CGColor;
+                  self.statusLamp.layer.shadowRadius = 8;
+                  self.statusLamp.layer.shadowOpacity = 1;
+                  [self addSubview:self.statusLamp];
+                  
+                  [self startCloudSync];
+                  
+                  self.userInteractionEnabled = YES;
+                  UIPanGestureRecognizer *p = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+                  [self addGestureRecognizer:p];
+              }
+              return self;
+          }
+
+          - (void)handlePan:(UIPanGestureRecognizer *)p {
+              CGPoint t = [p translationInView:self.superview];
+              self.center = CGPointMake(self.center.x + t.x, self.center.y + t.y);
+              [p setTranslation:CGPointZero inView:self.superview];
+          }
+
+          - (void)startCloudSync {
+              NSURL *url = [NSURL URLWithString:SERVER_API];
+              [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *d, NSURLResponse *r, NSError *e) {
+                  dispatch_async(dispatch_get_main_queue(), ^{
+                      if (e || !d) {
+                          self.statusLabel.text = @"فشل الاتصال بالسيرفر!";
+                          self.statusLamp.backgroundColor = [UIColor orangeColor];
+                          return;
+                      }
+                      NSDictionary *json = [NSJSONSerialization JSONObjectWithData:d options:0 error:nil];
+                      if (!json) return;
+                      
+                      NSString *status = json[@"status"];
+                      NSString *message = json[@"message"];
+                      
+                      if ([status isEqualToString:@"maintenance"]) {
+                          [self showMaintenance:message];
+                      } else if ([status isEqualToString:@"safe"]) {
+                          self.statusLabel.text = @"الحماية مفعلة ✅";
+                          self.statusLabel.textColor = [UIColor greenColor];
+                          self.statusLamp.backgroundColor = [UIColor greenColor];
+                          self.statusLamp.layer.shadowColor = [UIColor greenColor].CGColor;
+                      } else if ([status isEqualToString:@"detected"]) {
+                          self.statusLabel.text = @"مكشوف! اخرج فوراً 🛑";
+                          self.statusLabel.textColor = [UIColor redColor];
+                          self.statusLamp.backgroundColor = [UIColor redColor];
+                          self.statusLamp.layer.shadowColor = [UIColor redColor].CGColor;
+                      }
+                  });
+              }] resume];
+          }
+
+          - (void)showMaintenance:(NSString *)m {
+              self.hidden = YES;
+              UIView *v = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+              v.backgroundColor = [UIColor blackColor];
+              UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
+              l.text = [NSString stringWithFormat:@"🛑 النظام تحت الصيانة:\n%@", m];
+              l.textColor = [UIColor whiteColor];
+              l.textAlignment = NSTextAlignmentCenter;
+              l.numberOfLines = 0;
+              [v addSubview:l];
+              
+              // طريقة حديثة للوصول للنافذة بدون تحذيرات
+              UIWindow *window = nil;
+              if (@available(iOS 13.0, *)) {
+                  for (UIWindowScene* windowScene in [UIApplication sharedApplication].connectedScenes) {
+                      if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                          window = windowScene.windows.firstObject;
+                          break;
+                      }
+                  }
+              }
+              if (!window) window = [UIApplication sharedApplication].keyWindow;
+              [window addSubview:v];
+          }
+          @end
+
+          void __attribute__((constructor)) start() {
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  UIWindow *window = nil;
+                  if (@available(iOS 13.0, *)) {
+                      for (UIWindowScene* windowScene in [UIApplication sharedApplication].connectedScenes) {
+                          if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                              window = windowScene.windows.firstObject;
+                              break;
+                          }
+                      }
+                  }
+                  if (!window) window = [UIApplication sharedApplication].keyWindow;
+                  
+                  if (window) {
+                      SovereignUI *ui = [[SovereignUI alloc] initWithFrame:CGRectMake(50, 100, 200, 45)];
+                      [window addSubview:ui];
+                  }
+              });
+          }
+          EOF
+
+          echo "✅ تم كتابة النخاع البرمجي بنجاح ومسح التحذيرات."
+
+          # [2] جلب مسار الـ SDK الرسمي
+          export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          
+          # [3] الصهر المباشر مع ربط مكتبة C++ (الحل الجذري للخطأ)
+          # أضفنا -lc++ لسحق خطأ Undefined symbols
+          clang -dynamiclib -arch arm64 wsam_core.mm -o Sovereign_Final.dylib \
+          -isysroot $SDK_PATH \
+          -framework Foundation -framework UIKit -framework CoreGraphics \
+          -fobjc-arc -lc++ -Os
+          
+          echo "✅ تمت عملية الصهر بنجاح يا سيادة الجنرال!"
+
+      - name: Deliver Weapon
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sovereign-Dylib-v90
+          path: Sovereign_Final.dylib
