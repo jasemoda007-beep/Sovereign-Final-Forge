@@ -18,7 +18,6 @@ jobs:
           #import <Foundation/Foundation.h>
 
           // [🎯] إحداثيات مركز القيادة - سيرفر الجنرال وسام (VPS)
-          // تم دمج الرابط المليمتري لضمان الالتحام الفوري
           #define SERVER_API @"http://16.171.230.58/dashboard_v60.php?api=true"
 
           @interface SovereignVPSUI : UIView
@@ -30,13 +29,12 @@ jobs:
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
               if (self) {
-                  // [التصميم الجمالي السيادي]: خلفية سوداء زجاجية مع حدود سيان متوهجة
+                  // [التصميم الجمالي السيادي]
                   self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
                   self.layer.cornerRadius = 15;
                   self.layer.borderColor = [UIColor cyanColor].CGColor;
                   self.layer.borderWidth = 1.5;
                   
-                  // تأثير الظل المتوهج (Glow Effect)
                   self.layer.shadowColor = [UIColor cyanColor].CGColor;
                   self.layer.shadowOffset = CGSizeMake(0, 0);
                   self.layer.shadowRadius = 10;
@@ -61,9 +59,26 @@ jobs:
 
           // =========================================================
           // [⚙️] محرك الحقن المليمتري (The Injection Core)
+          // بناءً على تقرير الاستخبارات: استهداف مجلد anogs.framework/anogs
           // =========================================================
           - (void)applyPatches:(NSArray *)offsets {
-              uintptr_t slide = _dyld_get_image_vmaddr_slide(0); 
+              uintptr_t slide = 0;
+              
+              // 1. البحث الراداري عن مسار ملف أنجوس مليمتر بمليمتر
+              uint32_t imageCount = _dyld_image_count();
+              for (uint32_t i = 0; i < imageCount; i++) {
+                  const char *imageName = _dyld_get_image_name(i);
+                  // البحث عن المسار الدقيق الذي حدده الجنرال وسام
+                  if (imageName && strstr(imageName, "anogs.framework/anogs") != NULL) {
+                      slide = _dyld_get_image_vmaddr_slide(i);
+                      NSLog(@"[Sovereign] Target Framework Spotted: %s", imageName);
+                      break;
+                  }
+              }
+              
+              // إذا لم يجد الإطار، يفترض الملف الرئيسي كاحتياط
+              if (slide == 0) slide = _dyld_get_image_vmaddr_slide(0);
+
               mach_port_t task = mach_task_self();
               for (NSDictionary *off in offsets) {
                   uintptr_t addr = strtoull([off[@"address"] UTF8String], NULL, 16);
@@ -76,6 +91,8 @@ jobs:
                       unsigned char c = (unsigned char)v;
                       [data appendBytes:&c length:1];
                   }
+                  
+                  // سحق الحماية في الذاكرة
                   vm_protect(task, (vm_address_t)target, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
                   vm_write(task, (vm_address_t)target, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
                   vm_protect(task, (vm_address_t)target, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
@@ -124,20 +141,35 @@ jobs:
 
           - (void)showLockdown:(NSString *)m {
               self.hidden = YES;
-              UIWindow *win = [[UIApplication sharedApplication] keyWindow];
-              UIView *v = [[UIView alloc] initWithFrame:win.bounds];
-              v.backgroundColor = [UIColor blackColor];
-              UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
-              l.text = [NSString stringWithFormat:@"🛑 صيانة عاجلة:\n%@", m];
-              l.textColor = [UIColor whiteColor];
-              l.textAlignment = NSTextAlignmentCenter;
-              l.numberOfLines = 0;
-              [win addSubview:v];
+              UIWindow *win = nil;
+              if (@available(iOS 13.0, *)) {
+                  for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+                      if (scene.activationState == UISceneActivationStateForegroundActive) {
+                          win = scene.windows.firstObject; break;
+                      }
+                  }
+              }
+              if (!win) {
+                  win = [[UIApplication sharedApplication] keyWindow];
+              }
+              
+              if (win) {
+                  UIView *v = [[UIView alloc] initWithFrame:win.bounds];
+                  v.backgroundColor = [UIColor blackColor];
+                  UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
+                  l.text = [NSString stringWithFormat:@"🛑 صيانة عاجلة:\n%@", m];
+                  l.textColor = [UIColor whiteColor];
+                  l.textAlignment = NSTextAlignmentCenter;
+                  l.numberOfLines = 0;
+                  [v addSubview:l];
+                  [win addSubview:v];
+              }
           }
           @end
 
           void __attribute__((constructor)) start_vps_engine() {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+              // تم ضبط الأقواس بدقة مليمترية!
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   UIWindow *win = nil;
                   if (@available(iOS 13.0, *)) {
                       for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
@@ -146,7 +178,9 @@ jobs:
                           }
                       }
                   }
-                  if (!win) win = [UIApplication sharedApplication].keyWindow;
+                  if (!win) {
+                      win = [UIApplication sharedApplication].keyWindow;
+                  }
                   
                   if (win) {
                       CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
@@ -162,10 +196,11 @@ jobs:
           # استدعاء مسار الـ SDK الرسمي للآيفون من داخل سيرفر الماك
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           
-          # عملية التجميع المليمتري لإنتاج الدايلب
+          # [تكتيك السيادة]: إضافة -Wno-deprecated-declarations لإخراس تحذيرات آبل
           clang -dynamiclib -arch arm64 wsam_core.mm -o Sovereign_VPS_Armed.dylib \
           -isysroot $SDK_PATH \
           -framework Foundation -framework UIKit -framework CoreGraphics \
+          -Wno-deprecated-declarations \
           -fobjc-arc -lc++ -Os
           
           echo "✅ تمت عملية الصهر بنجاح يا سيادة الجنرال!"
