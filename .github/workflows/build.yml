@@ -1,16 +1,15 @@
-name: Sovereign-NoIP-Uplink-v60k
+name: Sovereign-NoIP-Uplink-v350k
 on: [push, workflow_dispatch]
 
 jobs:
   build:
-    name: "صهر السلاح السيادي للجنرال وسام - No-IP Edition"
+    name: "صهر سلاح البصرة السيادي للجنرال وسام"
     runs-on: macos-latest
     steps:
-      - name: "تجهيز النخاع البرمجي والالتحام بالرادار الثابت"
+      - name: "تجهيز النخاع البرمجي"
         run: |
           echo "🔥 بدء تشغيل مفاعل البصرة (نسخة الرادار الثابت: jojolmlm.hopto.org)..."
           
-          # [1] المفاعل يكتب كود الـ mm السيادي مدمجاً برابط No-IP المليمتري
           cat << 'EOF' > wsam_core.mm
           #import <UIKit/UIKit.h>
           #import <mach-o/dyld.h>
@@ -18,7 +17,6 @@ jobs:
           #import <Foundation/Foundation.h>
 
           // [🎯] إحداثيات مركز القيادة الثابتة (No-IP)
-          // تم استبدال الـ IP المتغير بالرابط الدائم لضمان السيادة المطلقة
           #define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
 
           @interface SovereignNoIPUI : UIView
@@ -30,7 +28,7 @@ jobs:
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
               if (self) {
-                  // [التصميم الجمالي السيادي]: زجاجي أسود مع حدود سيان متوهجة
+                  // [التصميم الجمالي السيادي]
                   self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
                   self.layer.cornerRadius = 15;
                   self.layer.borderColor = [UIColor cyanColor].CGColor;
@@ -58,13 +56,13 @@ jobs:
               return self;
           }
 
-          // [⚙️] محرك الحقن المليمتري المتوافق مع الرادار الثابت
+          // [⚙️] محرك الحقن المليمتري المتوافق مع الرادار الثابت والأنكوس
           - (void)applyPatches:(NSArray *)offsets {
               uintptr_t slide = 0;
-              // البحث الراداري عن مسار ملف أنجوس مليمتر بمليمتر
               uint32_t imageCount = _dyld_image_count();
               for (uint32_t i = 0; i < imageCount; i++) {
                   const char *imageName = _dyld_get_image_name(i);
+                  // البحث عن المسار الدقيق: anogs.framework/anogs
                   if (imageName && strstr(imageName, "anogs.framework/anogs") != NULL) {
                       slide = _dyld_get_image_vmaddr_slide(i);
                       break;
@@ -93,7 +91,7 @@ jobs:
           - (void)startCloudSync {
               NSURL *url = [NSURL URLWithString:SERVER_API];
               NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
-              [req setValue:@"Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)" forHTTPHeaderField:@"User-Agent"];
+              [req setValue:@"Mozilla/5.0 (Sovereign/1.0)" forHTTPHeaderField:@"User-Agent"];
               [req setHTTPMethod:@"GET"];
               [req setTimeoutInterval:20.0];
 
@@ -109,12 +107,11 @@ jobs:
                       if (!json) return;
                       
                       NSString *status = json[@"system_status"];
-                      NSString *message = json[@"notification"];
                       NSArray *payload = json[@"payload"];
                       int freeze = [json[@"maintenance_mode"] intValue];
 
                       if (freeze == 1) {
-                          [self showLockdown:message];
+                          [self showLockdown:json[@"notification"]];
                       } else if ([status isEqualToString:@"safe"]) {
                           [self applyPatches:payload];
                           self.statusLabel.text = [NSString stringWithFormat:@"سيادة ثابتة ✅ | حقن %lu", (unsigned long)payload.count];
@@ -122,7 +119,7 @@ jobs:
                           self.statusLamp.backgroundColor = [UIColor greenColor];
                           self.layer.borderColor = [UIColor greenColor].CGColor;
                       } else {
-                          self.statusLabel.text = message;
+                          self.statusLabel.text = json[@"notification"];
                           self.statusLabel.textColor = [UIColor redColor];
                           self.statusLamp.backgroundColor = [UIColor redColor];
                       }
@@ -140,7 +137,7 @@ jobs:
                       }
                   }
               }
-              if (!win) win = [[UIApplication sharedApplication].keyWindow];
+              if (!win) win = [UIApplication sharedApplication].keyWindow;
               
               if (win) {
                   UIView *v = [[UIView alloc] initWithFrame:win.bounds];
@@ -157,6 +154,7 @@ jobs:
           @end
 
           void __attribute__((constructor)) start_noip_engine() {
+              // تصحيح أقواس دالة الانتظار مليمتر بمليمتر
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   UIWindow *win = nil;
                   if (@available(iOS 13.0, *)) {
@@ -179,12 +177,16 @@ jobs:
 
           # مرحلة الصهر المعماري للدايلب (ARM64)
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          
+          # إضافة -Wno-deprecated-declarations لتجاهل تحذيرات آبل المزعجة
           clang -dynamiclib -arch arm64 wsam_core.mm -o Sovereign_NoIP_Ready.dylib \
           -isysroot $SDK_PATH -framework Foundation -framework UIKit -framework CoreGraphics \
           -Wno-deprecated-declarations -fobjc-arc -lc++ -Os
           
+          echo "✅ تمت عملية الصهر بنجاح يا سيادة الجنرال!"
+
       - name: "تسليم الغنيمة (Upload Artifact)"
         uses: actions/upload-artifact@v4
         with:
-          name: Sovereign-NoIP-Dylib
+          name: Sovereign-NoIP-Ready
           path: Sovereign_NoIP_Ready.dylib
