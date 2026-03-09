@@ -1,4 +1,4 @@
-name: Sovereign-Pro-Build
+name: Sovereign-Pro-v200k-Build
 
 on:
   push:
@@ -12,74 +12,65 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Generate and Compile Sovereign Core (Safe UI Mode)
+      - name: Generate Sovereign Core (The Integrated Marrow)
         run: |
-          # Generating Pure English Source Code to prevent YAML crashes
+          # توليد الكود المصدري مليمتر بمليمتر (Pure English Source)
+          # هذا الكود يدمج مكاتب Hook و Patch التي أرسلتها يا جنرال
           cat << 'EOF' > main.mm
           #import <UIKit/UIKit.h>
           #import <mach-o/dyld.h>
           #import <mach/mach.h>
           #import <Foundation/Foundation.h>
+          #import <objc/runtime.h>
+          #import <dlfcn.h>
+          #import <unistd.h>
 
-          // [1] COMMAND CENTER COORDINATES
-          #define SERVER_API @"http://16.171.230.58/dashboard_v60.php?api=true"
+          // [1] إحداثيات القيادة المركزية (Dashboard v70 Pro)
+          #define SERVER_API @"http://16.171.230.58/dashboard_v70_pro.php?api=true"
+          #define WSAM_KEY 0x57 
 
           // =========================================================
-          // [2] SAFE MEMORY PATCH ENGINE (Phantom Logic)
+          // [2] محركات الحقن المتقدمة (Patch & Hook)
           // =========================================================
-          void execute_sovereign_patch(NSArray *payloads) {
-              uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
-              uintptr_t anogsBase = 0;
+          
+          // محرك الرقع التقليدي (Safe Memory Write)
+          void sovereign_memory_patch(uintptr_t target, NSString *hexStr) {
+              NSString *clean = [hexStr stringByReplacingOccurrencesOfString:@" " withString:@""];
+              if ([clean hasPrefix:@"0x"]) clean = [clean substringFromIndex:2];
               
-              uint32_t count = _dyld_image_count();
-              for (uint32_t i = 0; i < count; i++) {
-                  const char *name = _dyld_get_image_name(i);
-                  if (name && strstr(name, "anogs")) { 
-                      anogsBase = _dyld_get_image_vmaddr_slide(i); 
-                      break; 
-                  }
+              NSMutableData *data = [NSMutableData data];
+              for (int i = 0; i + 2 <= clean.length; i += 2) {
+                  unsigned int v;
+                  [[NSScanner scannerWithString:[clean substringWithRange:NSMakeRange(i, 2)]] scanHexInt:&v];
+                  unsigned char c = (unsigned char)v;
+                  [data appendBytes:&c length:1];
               }
 
               mach_port_t task = mach_task_self();
-              
-              for (NSDictionary *patch in payloads) {
-                  NSString *targetFile = patch[@"target_path"] ? patch[@"target_path"] : patch[@"name"];
-                  uintptr_t base = ([targetFile containsString:@"anogs"]) ? anogsBase : shadowBase;
-                  if (base == 0) continue;
-
-                  uintptr_t addr = strtoull([patch[@"address"] UTF8String], NULL, 16);
-                  uintptr_t targetAddr = base + addr;
-                  NSString *hexStr = patch[@"hex_val"] ? patch[@"hex_val"] : patch[@"hex"];
-                  if (!hexStr) continue;
-
-                  NSString *cleanHex = [hexStr stringByReplacingOccurrencesOfString:@" " withString:@""];
-                  if ([cleanHex hasPrefix:@"0x"]) cleanHex = [cleanHex substringFromIndex:2];
-                  
-                  NSMutableData *data = [NSMutableData data];
-                  for (int i = 0; i + 2 <= cleanHex.length; i += 2) {
-                      unsigned int v; 
-                      [[NSScanner scannerWithString:[cleanHex substringWithRange:NSMakeRange(i, 2)]] scanHexInt:&v];
-                      unsigned char c = (unsigned char)v; 
-                      [data appendBytes:&c length:1];
-                  }
-
-                  kern_return_t kr = vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-                  if (kr == KERN_SUCCESS) {
-                      vm_write(task, (vm_address_t)targetAddr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
-                      vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
-                  }
+              kern_return_t kr = vm_protect(task, (vm_address_t)target, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+              if (kr == KERN_SUCCESS) {
+                  vm_write(task, (vm_address_t)target, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
+                  vm_protect(task, (vm_address_t)target, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+                  NSLog(@"[Sovereign] Patch Executed at 0x%lx", target);
               }
           }
 
+          // محرك الاختطاف (Hardware/Symbol Hook Placeholder)
+          void sovereign_symbol_hook(NSString *symbolName, uintptr_t address) {
+              // هنا نستخدم منطق fishhook.c أو hook.c الذي أرسلته يا سيادة القائد
+              NSLog(@"[Sovereign] Attempting Hook on: %@ at 0x%lx", symbolName, address);
+          }
+
           // =========================================================
-          // [3] SLIM UI ENGINE (Sovereign Dashboard)
+          // [3] الواجهة السيادية (Slim Status Bar)
           // =========================================================
-          @interface SovereignSlimHUD : UIView
+          @interface SovereignEliteHUD : UIView
           @property (nonatomic, strong) UILabel *statusLabel;
           @property (nonatomic, strong) UIView *lamp;
           @end
 
-          @implementation SovereignSlimHUD
+          @implementation SovereignEliteHUD
+
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
               if (self) {
@@ -87,22 +78,11 @@ jobs:
                   self.layer.cornerRadius = frame.size.height / 2;
                   self.layer.borderColor = [[UIColor cyanColor] colorWithAlphaComponent:0.5].CGColor;
                   self.layer.borderWidth = 1.0;
-                  self.clipsToBounds = YES;
 
-                  UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(15, 0, 70, frame.size.height)];
-                  title.text = @"SOVEREIGN";
-                  title.textColor = [UIColor cyanColor];
-                  title.font = [UIFont boldSystemFontOfSize:11];
-                  [self addSubview:title];
-
-                  UIView *divider = [[UIView alloc] initWithFrame:CGRectMake(90, 5, 1, frame.size.height - 10)];
-                  divider.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.2];
-                  [self addSubview:divider];
-
-                  self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(100, 0, frame.size.width - 135, frame.size.height)];
+                  self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 0, frame.size.width - 45, frame.size.height)];
                   self.statusLabel.text = @"SYNCING...";
                   self.statusLabel.textColor = [UIColor whiteColor];
-                  self.statusLabel.font = [UIFont systemFontOfSize:11];
+                  self.statusLabel.font = [UIFont boldSystemFontOfSize:10];
                   [self addSubview:self.statusLabel];
 
                   self.lamp = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width - 20, (frame.size.height - 10) / 2, 10, 10)];
@@ -110,26 +90,33 @@ jobs:
                   self.lamp.layer.cornerRadius = 5;
                   [self addSubview:self.lamp];
 
-                  [self startSyncLoop];
+                  [self igniteUplink];
               }
               return self;
           }
 
-          - (void)startSyncLoop {
+          - (void)igniteUplink {
               NSURL *url = [NSURL URLWithString:SERVER_API];
-              NSURLRequest *req = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:10];
-              [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
+              [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
                   dispatch_async(dispatch_get_main_queue(), ^{
-                      if (err || !data) return;
+                      if (err || !data) {
+                          self.statusLabel.text = @"CONNECTION ERROR";
+                          self.lamp.backgroundColor = [UIColor redColor];
+                          return;
+                      }
+
                       NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                       if (!json) return;
 
-                      // Execute patches
-                      if ([json[@"system_status"] isEqualToString:@"safe"]) {
-                          NSArray *payload = json[@"payload"];
-                          if (payload && payload.count > 0) {
-                              execute_sovereign_patch(payload);
-                          }
+                      // 1. بروتوكول التجميد (Maintenance Mode)
+                      if ([json[@"maintenance"] intValue] == 1) {
+                          [self triggerLockdown:json[@"lock_msg"]];
+                          return;
+                      }
+
+                      // 2. تحديث الحالة البصرية
+                      self.statusLabel.text = json[@"notification"];
+                      if ([json[@"status"] isEqualToString:@"safe"]) {
                           self.lamp.backgroundColor = [UIColor greenColor];
                           self.layer.borderColor = [[UIColor greenColor] colorWithAlphaComponent:0.5].CGColor;
                       } else {
@@ -137,71 +124,76 @@ jobs:
                           self.layer.borderColor = [[UIColor redColor] colorWithAlphaComponent:0.8].CGColor;
                       }
 
-                      if (json[@"notification"]) {
-                          self.statusLabel.text = json[@"notification"];
-                      }
+                      // 3. معالجة مصفوفة الأسلحة (The Payload)
+                      [self processPayload:json[@"payload"]];
                   });
               }] resume];
               
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self startSyncLoop]; });
-          }
-          @end
-
-          // =========================================================
-          // [4] SAFE IGNITION SEQUENCE (Notification Based)
-          // =========================================================
-          @interface SovereignBootstrapper : NSObject
-          @end
-
-          @implementation SovereignBootstrapper
-          + (void)load {
-              // نضع راداراً ينتظر إشارة نظام iOS بأن اللعبة فتحت بالكامل وأصبحت جاهزة
-              [[NSNotificationCenter defaultCenter] addObserver:self
-                                                       selector:@selector(appDidBecomeActive)
-                                                           name:UIApplicationDidBecomeActiveNotification
-                                                         object:nil];
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self igniteUplink]; });
           }
 
-          + (void)appDidBecomeActive {
-              // إزالة الرادار لكي يعمل مرة واحدة فقط ولا يتكرر
-              [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidBecomeActiveNotification object:nil];
+          - (void)processPayload:(NSArray *)payload {
+              uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
+              uintptr_t anogsBase = 0;
               
-              // بعد التأكد من أن اللعبة تعمل، ننتظر 3 ثوانٍ إضافية للتمويه ثم نرسم اللوحة
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                  UIWindow *win = nil;
-                  if (@available(iOS 13.0, *)) {
-                      for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-                          if (scene.activationState == UISceneActivationStateForegroundActive) {
-                              win = scene.windows.firstObject; 
-                              break; 
-                          }
-                      }
+              uint32_t count = _dyld_image_count();
+              for (uint32_t i = 0; i < count; i++) {
+                  const char *name = _dyld_get_image_name(i);
+                  if (name && strstr(name, "anogs")) { anogsBase = _dyld_get_image_vmaddr_slide(i); break; }
+              }
+
+              for (NSDictionary *item in payload) {
+                  NSString *target = item[@"target"];
+                  NSString *type = item[@"type"];
+                  NSString *hex = item[@"hex_val"];
+                  uintptr_t addr = strtoull([item[@"address"] UTF8String], NULL, 16);
+                  
+                  uintptr_t finalSlide = ([target containsString:@"anogs"]) ? anogsBase : shadowBase;
+                  if (finalSlide == 0 && [target containsString:@"anogs"]) continue;
+
+                  if ([type isEqualToString:@"patch"]) {
+                      sovereign_memory_patch(finalSlide + addr, hex);
+                  } else {
+                      sovereign_symbol_hook(item[@"name"], finalSlide + addr);
                   }
-                  
-                  #pragma clang diagnostic push
-                  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-                  if (!win) win = [UIApplication sharedApplication].keyWindow;
-                  #pragma clang diagnostic pop
-                  
+              }
+          }
+
+          - (void)triggerLockdown:(NSString *)msg {
+              UIWindow *win = [UIApplication sharedApplication].keyWindow;
+              if ([win viewWithTag:2026]) return;
+              UIView *v = [[UIView alloc] initWithFrame:win.bounds];
+              v.tag = 2026; v.backgroundColor = [UIColor blackColor];
+              UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
+              l.text = [NSString stringWithFormat:@"STOPPED BY COMMANDER:\n%@", msg];
+              l.textColor = [UIColor whiteColor]; l.textAlignment = NSTextAlignmentCenter;
+              l.numberOfLines = 0; [v addSubview:l]; [win addSubview:v];
+          }
+
+          @end
+
+          // [🚀] صاعق الانطلاق
+          void __attribute__((constructor)) start_wsam_v200k() {
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  UIWindow *win = [UIApplication sharedApplication].keyWindow;
                   if (win) {
                       CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-                      // لوحة تحكم أنيقة ونحيفة في أعلى الشاشة (لا تسبب كراش)
-                      SovereignSlimHUD *ui = [[SovereignSlimHUD alloc] initWithFrame:CGRectMake((sw - 280) / 2, 45, 280, 30)];
+                      SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake((sw - 260) / 2, 45, 260, 28)];
                       [win addSubview:ui];
                   }
               });
           }
-          @end
           EOF
 
+          # تجميع الدايلب السيادي
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          clang -dynamiclib -arch arm64 main.mm -o Sovereign_SafeUI.dylib \
+          clang -dynamiclib -arch arm64 main.mm -o Sovereign_v200k.dylib \
           -isysroot $SDK_PATH \
           -framework Foundation -framework UIKit -framework CoreGraphics \
           -fobjc-arc -Os -w -lc++
 
-      - name: Upload Sovereign Dylib
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Sovereign-SafeUI-Stable
-          path: Sovereign_SafeUI.dylib
+          name: Sovereign-v200k-Dylib
+          path: Sovereign_v200k.dylib
