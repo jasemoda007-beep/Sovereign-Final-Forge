@@ -1,4 +1,4 @@
-name: Sovereign-BugSplat-Forge-v900k
+name: Sovereign-BugSplat-Forge-v950k
 on: [push, workflow_dispatch]
 
 jobs:
@@ -8,7 +8,7 @@ jobs:
     steps:
       - name: "تجهيز النخاع البرمجي"
         run: |
-          echo "🔥 بدء تشغيل مفاعل الجنرال وسام (نسخة الصد الديناميكي ورادار الأخطاء)..."
+          echo "🔥 بدء تشغيل مفاعل الجنرال وسام (نسخة الصد الذري ورادار BugSplat)..."
           
           cat << 'EOF' > sovereign_core.mm
           #import <UIKit/UIKit.h>
@@ -55,7 +55,6 @@ jobs:
 
           // =========================================================
           // [⚙️] محرك الحقن المصفح (The Hardened Injection Engine)
-          // مصمم لمنع الانهيار (Crash-Resistant)
           // =========================================================
           - (void)safePatch:(uintptr_t)addr hex:(NSString *)hexStr {
               if (addr == 0) return;
@@ -63,22 +62,25 @@ jobs:
               NSData *data = [self dataFromHexString:hexStr];
               mach_port_t task = mach_task_self();
 
-              // [🛡️] تكتيك الصد 1: التحقق من صلاحية العنوان قبل اللمس
+              // [🛡️] تكتيك الصد المليمتري: التحقق من صلاحية العنوان (سحق الكراش)
               vm_size_t vmsize;
               vm_address_t vmadress = (vm_address_t)addr;
               vm_region_basic_info_data_64_t info;
               mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
               mach_port_t object_name;
               
-              if (mach_vm_region(task, &vmadress, &vmsize, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name) != KERN_SUCCESS) {
+              // تم استبدال mach_vm_region بـ vm_region_64 لضمان السيادة والاستقرار
+              kern_return_t kr_region = vm_region_64(task, &vmadress, &vmsize, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name);
+              
+              if (kr_region != KERN_SUCCESS) {
                   NSLog(@"[Sovereign] Warning: Address 0x%lx is unreachable. Skipping to avoid crash.", addr);
                   return;
               }
 
-              // [🛡️] تكتيك الصد 2: فتح الذاكرة ببروتوكول COPY لعدم كسر PAC
-              kern_return_t kr = vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+              // [🛡️] تكتيك الصد 2: فتح الذاكرة ببروتوكول COPY لعدم كسر حماية المعالج (PAC)
+              kern_return_t kr_prot = vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
               
-              if (kr == KERN_SUCCESS) {
+              if (kr_prot == KERN_SUCCESS) {
                   if (vm_write(task, (vm_address_t)addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length) == KERN_SUCCESS) {
                       vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
                       NSLog(@"[Sovereign] Patch Applied Successfully at 0x%lx", addr);
@@ -112,7 +114,7 @@ jobs:
                       NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                       if (!json) return;
 
-                      // رصد مسارات الأنكوس وشادو
+                      // رصد مسارات الأنكوس وشادو مليمتر بمليمتر
                       uintptr_t shadowSlide = _dyld_get_image_vmaddr_slide(0);
                       uintptr_t anogsSlide = 0;
                       uint32_t count = _dyld_image_count();
@@ -127,13 +129,14 @@ jobs:
                       NSArray *offsets = json[@"active_offsets"];
                       for (NSDictionary *off in offsets) {
                           uintptr_t base = ([off[@"target"] containsString:@"anogs"]) ? anogsSlide : shadowSlide;
-                          if (base != 0) {
+                          // حماية إضافية: إذا لم يجد أنكوس، لا يحقن لكي لا يكرش
+                          if (base != 0 || ![off[@"target"] containsString:@"anogs"]) {
                               uintptr_t addr = strtoull([off[@"address"] UTF8String], NULL, 16);
                               [self safePatch:(base + addr) hex:off[@"hex"]];
                           }
                       }
 
-                      self.statusLabel.text = json[@"notification"];
+                      self.statusLabel.text = json[@"notification"] ?: @"النظام تحت السيادة ✅";
                       self.statusLabel.textColor = [UIColor greenColor];
                       self.statusLamp.backgroundColor = [UIColor greenColor];
                       self.layer.borderColor = [UIColor greenColor].CGColor;
@@ -142,8 +145,8 @@ jobs:
           }
           @end
 
-          void __attribute__((constructor)) start_v900k_system() {
-              // تأخير 10 ثوانٍ لضمان تحميل كل الـ Frameworks وسحق الكراش
+          void __attribute__((constructor)) start_v950k_system() {
+              // تأخير تكتيكي (10 ثوانٍ) لضمان تحميل كل الأطر وسحق الكراش
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   UIWindow *win = [UIApplication sharedApplication].keyWindow;
                   if (win) {
@@ -155,19 +158,19 @@ jobs:
           }
           EOF
 
-      - name: "مرحلة الصهر المجهري (مع توليد رموز BugSplat)"
+      - name: "مرحلة الصهر المجهري (توليد رموز BugSplat)"
         run: |
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           
-          # إضافة خيار -g لتوليد الرموز (Debug Symbols) لرفعها لـ BugSplat
+          # صهر الدايلب مع خيار -g لفك شفرات الكراش في BugSplat
           clang -dynamiclib -arch arm64 -g sovereign_core.mm -o Sovereign_Elite.dylib \
           -isysroot $SDK_PATH -framework Foundation -framework UIKit -framework CoreGraphics \
           -Wno-deprecated-declarations -fobjc-arc -lc++ -Os
           
-          # توليد ملف dSYM (هذا ما ترفعه لموقع BugSplat)
+          # توليد ملف dSYM (القاموس الاستخباري لـ BugSplat)
           dsymutil Sovereign_Elite.dylib -o Sovereign_Elite.dylib.dSYM
           
-      - name: "تسليم الغنائم (Dylib + dSYM لـ BugSplat)"
+      - name: "تسليم الغنائم المزدوجة"
         uses: actions/upload-artifact@v4
         with:
           name: Sovereign-Elite-Package
