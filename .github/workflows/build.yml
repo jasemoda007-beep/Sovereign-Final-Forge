@@ -16,11 +16,13 @@ jobs:
           #import <mach-o/dyld.h>
           #import <mach/mach.h>
           #import <Foundation/Foundation.h>
-          #import <objc/runtime.h>
 
           #define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
-          #define OFFICIAL_ID @"com.tencent.ig"
+          
+          // الاوفست السيادي المستهدف للتجميد
+          #define ACE_OFFSET 0xB1D2860 
 
+          static BOOL isAceNeutralized = NO;
           static BOOL isDynamicInjectionActive = NO; 
           static NSString *currentNotification = @"Connecting to Cloud...";
 
@@ -31,26 +33,6 @@ jobs:
           @end
 
           @implementation SovereignEliteHUD
-
-          + (void)load {
-              static dispatch_once_t onceToken;
-              dispatch_once(&onceToken, ^{
-                  @try {
-                      Method origId = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
-                      Method swizId = class_getInstanceMethod([self class], @selector(sov_bundleIdentifier));
-                      method_exchangeImplementations(origId, swizId);
-
-                      Method origPath = class_getInstanceMethod([NSBundle class], @selector(bundlePath));
-                      Method swizPath = class_getInstanceMethod([self class], @selector(sov_bundlePath));
-                      method_exchangeImplementations(origPath, swizPath);
-                      
-                      NSLog(@"[Sovereign] Identity Masked: System believes we are OFFICIAL.");
-                  } @catch (NSException *e) {}
-              });
-          }
-
-          - (NSString *)sov_bundleIdentifier { return OFFICIAL_ID; }
-          - (NSString *)sov_bundlePath { return @"/var/containers/Bundle/Application/ShadowTrackerExtra.app"; }
 
           - (void)deployGhostSensor {
               dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
@@ -80,7 +62,7 @@ jobs:
                   self.layer.borderWidth = 1.2;
 
                   UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(25, 5, 170, 15)];
-                  title.text = @"SOVEREIGN ELITE v3400";
+                  title.text = @"SOVEREIGN ELITE v3600";
                   title.textColor = [UIColor cyanColor];
                   title.font = [UIFont boldSystemFontOfSize:9];
                   title.textAlignment = NSTextAlignmentCenter;
@@ -88,7 +70,7 @@ jobs:
 
                   self.aceStatusDot = [[UIView alloc] initWithFrame:CGRectMake(12, 8, 8, 8)];
                   self.aceStatusDot.layer.cornerRadius = 4;
-                  self.aceStatusDot.backgroundColor = [UIColor yellowColor]; 
+                  self.aceStatusDot.backgroundColor = [UIColor yellowColor]; // أصفر بالبداية
                   [self addSubview:self.aceStatusDot];
 
                   self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 22, 180, 20)];
@@ -112,7 +94,7 @@ jobs:
 
           - (void)startCloudSyncLoop {
               [self fetchAndApply];
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   [self startCloudSyncLoop];
               });
           }
@@ -121,6 +103,15 @@ jobs:
               NSURL *url = [NSURL URLWithString:SERVER_API];
               [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
                   dispatch_async(dispatch_get_main_queue(), ^{
+                      
+                      // تحديث لون النقطة بناءً على التجميد
+                      if (isAceNeutralized || isDynamicInjectionActive) {
+                          self.aceStatusDot.backgroundColor = [UIColor greenColor];
+                          self.aceStatusDot.layer.shadowColor = [UIColor greenColor].CGColor;
+                          self.aceStatusDot.layer.shadowRadius = 4;
+                          self.aceStatusDot.layer.shadowOpacity = 1;
+                      }
+
                       if (err || !data) { self.serverLamp.backgroundColor = [UIColor orangeColor]; return; }
                       NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                       if (!json) return;
@@ -133,19 +124,9 @@ jobs:
                           self.serverLamp.backgroundColor = [UIColor greenColor];
                           self.layer.borderColor = [UIColor greenColor].CGColor;
                           
-                          // تفعيل محرك الحقن السحابي المليمتري
                           if (json[@"payload"]) {
                               [self executeDynamicPayload:json[@"payload"]];
                           }
-
-                          // تحديث النقطة بناءً على نجاح الحقن
-                          self.aceStatusDot.backgroundColor = isDynamicInjectionActive ? [UIColor greenColor] : [UIColor yellowColor];
-                          if (isDynamicInjectionActive) {
-                              self.aceStatusDot.layer.shadowColor = [UIColor greenColor].CGColor;
-                              self.aceStatusDot.layer.shadowRadius = 4;
-                              self.aceStatusDot.layer.shadowOpacity = 1;
-                          }
-
                       } else {
                           self.statusLabel.textColor = [UIColor redColor];
                           self.serverLamp.backgroundColor = [UIColor redColor];
@@ -239,7 +220,39 @@ jobs:
           }
           @end
 
-          void __attribute__((constructor)) start_v3400_system() {
+          // دالة تجميد الاوفست المستهدف مليمتر بمليمتر
+          void Neutralize_ACE_Diagnostic() {
+              uintptr_t anogs_header = 0;
+              uint32_t count = _dyld_image_count();
+              for (uint32_t i = 0; i < count; i++) {
+                  const char *name = _dyld_get_image_name(i);
+                  if (name && strstr(name, "anogs")) {
+                      anogs_header = (uintptr_t)_dyld_get_image_header(i);
+                      break;
+                  }
+              }
+
+              if (anogs_header != 0) {
+                  uintptr_t target = anogs_header + ACE_OFFSET;
+                  uint32_t ret_cmd = 0xD65F03C0; 
+                  mach_port_t task = mach_task_self();
+                  
+                  vm_address_t page = target & ~PAGE_MASK;
+                  
+                  kern_return_t kr = vm_protect(task, page, PAGE_SIZE, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+                  if (kr == KERN_SUCCESS) {
+                      if (vm_write(task, (vm_address_t)target, (vm_offset_t)&ret_cmd, 4) == KERN_SUCCESS) {
+                          vm_protect(task, page, PAGE_SIZE, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+                          isAceNeutralized = YES;
+                      } else {
+                          vm_protect(task, page, PAGE_SIZE, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+                      }
+                  }
+              }
+          }
+
+          void __attribute__((constructor)) start_v3600_system() {
+              // إظهار الواجهة أولاً
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   UIWindow *win = nil;
                   if (@available(iOS 13.0, *)) {
@@ -257,6 +270,11 @@ jobs:
                       SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake([UIScreen mainScreen].bounds.size.width/2 - 110, 45, 220, 45)];
                       [win addSubview:ui];
                   }
+              });
+
+              // تجميد الاوفست بعد 15 ثانية لتجاوز شاشة التحميل وتجنب الكراش
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  Neutralize_ACE_Diagnostic();
               });
           }
           EOF
