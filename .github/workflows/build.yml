@@ -1,17 +1,14 @@
-name: Sovereign-Final-Forge-v600k
-
-on:
-  push:
-  workflow_dispatch:
+name: Sovereign-BugSplat-Forge-v900k
+on: [push, workflow_dispatch]
 
 jobs:
   build:
-    name: "صهر سلاح البصرة السيادي"
+    name: "صهر سلاح البصرة السيادي المصفح"
     runs-on: macos-latest
     steps:
       - name: "تجهيز النخاع البرمجي"
         run: |
-          echo "🔥 بدء تشغيل مفاعل الجنرال وسام (نسخة التمركز الثابت والالتحام المضمون)..."
+          echo "🔥 بدء تشغيل مفاعل الجنرال وسام (نسخة الصد الديناميكي ورادار الأخطاء)..."
           
           cat << 'EOF' > sovereign_core.mm
           #import <UIKit/UIKit.h>
@@ -22,168 +19,158 @@ jobs:
           // [🎯] إحداثيات الرادار الثابت No-IP للجنرال وسام
           #define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
 
-          @interface SovereignStaticUI : UIView
+          @interface SovereignEliteUI : UIView
           @property (nonatomic, strong) UILabel *statusLabel;
           @property (nonatomic, strong) UIView *statusLamp;
-          @property (nonatomic, strong) NSString *lastMsg;
           @end
 
-          @implementation SovereignStaticUI
+          @implementation SovereignEliteUI
 
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
               if (self) {
-                  // [التصميم السيادي]: أسود زجاجي مصفح بحدود سيان
+                  // [التصميم السيادي المصفح]
                   self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
                   self.layer.cornerRadius = 15;
                   self.layer.borderColor = [UIColor cyanColor].CGColor;
                   self.layer.borderWidth = 1.5;
-                  
-                  // تأثير التوهج الراداري
-                  self.layer.shadowColor = [UIColor cyanColor].CGColor;
-                  self.layer.shadowRadius = 10;
-                  self.layer.shadowOpacity = 0.6;
-                  
+                  self.userInteractionEnabled = YES;
+
                   self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(15, 8, 190, 20)];
-                  self.statusLabel.text = @"رادار السيادة متصل بالبصرة";
+                  self.statusLabel.text = @"رادار السيادة: جاري الفحص المجهري";
                   self.statusLabel.textColor = [UIColor whiteColor];
                   self.statusLabel.font = [UIFont boldSystemFontOfSize:10];
                   self.statusLabel.textAlignment = NSTextAlignmentCenter;
                   [self addSubview:self.statusLabel];
                   
                   self.statusLamp = [[UIView alloc] initWithFrame:CGRectMake(10, 12, 12, 12)];
-                  self.statusLamp.backgroundColor = [UIColor greenColor];
+                  self.statusLamp.backgroundColor = [UIColor yellowColor];
                   self.statusLamp.layer.cornerRadius = 6;
                   [self addSubview:self.statusLamp];
 
-                  // [تكتيك التحديث باللمس]: تحديث النخاع عند الضغط
-                  UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(manualPulseUpdate)];
-                  [self addGestureRecognizer:tap];
-                  self.userInteractionEnabled = YES;
-
-                  [self fetchAndInject];
+                  [self fetchAndSecureInject];
               }
               return self;
           }
 
-          - (void)manualPulseUpdate {
-              [UIView animateWithDuration:0.2 animations:^{ self.alpha = 0.3; } completion:^(BOOL f){ self.alpha = 1.0; }];
-              self.statusLabel.text = @"جاري إعادة صهر الإحداثيات...";
-              self.statusLamp.backgroundColor = [UIColor yellowColor];
-              [self fetchAndInject];
-          }
+          // =========================================================
+          // [⚙️] محرك الحقن المصفح (The Hardened Injection Engine)
+          // مصمم لمنع الانهيار (Crash-Resistant)
+          // =========================================================
+          - (void)safePatch:(uintptr_t)addr hex:(NSString *)hexStr {
+              if (addr == 0) return;
 
-          // =========================================================
-          // [⚙️] محرك الحقن المصفح (The Universal Anti-Crash Engine)
-          // =========================================================
-          - (void)executeSovereignPatch:(NSArray *)offsets {
-              uint32_t imageCount = _dyld_image_count();
+              NSData *data = [self dataFromHexString:hexStr];
               mach_port_t task = mach_task_self();
 
-              for (NSDictionary *off in offsets) {
-                  uintptr_t addr = strtoull([off[@"address"] UTF8String], NULL, 16);
-                  NSString *targetStr = off[@"target"];
-                  uintptr_t slide = 0;
+              // [🛡️] تكتيك الصد 1: التحقق من صلاحية العنوان قبل اللمس
+              vm_size_t vmsize;
+              vm_address_t vmadress = (vm_address_t)addr;
+              vm_region_basic_info_data_64_t info;
+              mach_msg_type_number_t info_count = VM_REGION_BASIC_INFO_COUNT_64;
+              mach_port_t object_name;
+              
+              if (mach_vm_region(task, &vmadress, &vmsize, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name) != KERN_SUCCESS) {
+                  NSLog(@"[Sovereign] Warning: Address 0x%lx is unreachable. Skipping to avoid crash.", addr);
+                  return;
+              }
 
-                  // البحث عن ملف anogs.framework/anogs مليمتر بمليمتر
-                  for (uint32_t i = 0; i < imageCount; i++) {
-                      const char *name = _dyld_get_image_name(i);
-                      if (name && strstr(name, "anogs")) {
-                          slide = _dyld_get_image_vmaddr_slide(i);
-                          break;
-                      }
+              // [🛡️] تكتيك الصد 2: فتح الذاكرة ببروتوكول COPY لعدم كسر PAC
+              kern_return_t kr = vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+              
+              if (kr == KERN_SUCCESS) {
+                  if (vm_write(task, (vm_address_t)addr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length) == KERN_SUCCESS) {
+                      vm_protect(task, (vm_address_t)addr, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+                      NSLog(@"[Sovereign] Patch Applied Successfully at 0x%lx", addr);
                   }
-                  if (slide == 0) slide = _dyld_get_image_vmaddr_slide(0);
-
-                  uintptr_t targetAddr = slide + addr;
-                  NSString *hexStr = off[@"hex"];
-                  
-                  // تحويل الهيكس لبايتات حقيقية
-                  NSMutableData *data = [NSMutableData data];
-                  NSString *cleanHex = [hexStr stringByReplacingOccurrencesOfString:@" " withString:@""];
-                  if ([cleanHex hasPrefix:@"0x"]) cleanHex = [cleanHex substringFromIndex:2];
-                  for (int i = 0; i + 2 <= cleanHex.length; i += 2) {
-                      unsigned int v;
-                      [[NSScanner scannerWithString:[cleanHex substringWithRange:NSMakeRange(i, 2)]] scanHexInt:&v];
-                      unsigned char c = (unsigned char)v;
-                      [data appendBytes:&c length:1];
-                  }
-
-                  // [الدرع المليمتري]: كسر حماية الذاكرة بأمان (Copy-on-Write)
-                  vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-                  vm_write(task, (vm_address_t)targetAddr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
-                  vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
               }
           }
 
-          - (void)fetchAndInject {
+          - (NSData *)dataFromHexString:(NSString *)hex {
+              NSString *clean = [hex stringByReplacingOccurrencesOfString:@" " withString:@""];
+              if ([clean hasPrefix:@"0x"]) clean = [clean substringFromIndex:2];
+              NSMutableData *data = [NSMutableData data];
+              for (int i = 0; i + 2 <= clean.length; i += 2) {
+                  unsigned int v;
+                  [[NSScanner scannerWithString:[clean substringWithRange:NSMakeRange(i, 2)]] scanHexInt:&v];
+                  unsigned char c = (unsigned char)v;
+                  [data appendBytes:&c length:1];
+              }
+              return data;
+          }
+
+          - (void)fetchAndSecureInject {
               NSURL *url = [NSURL URLWithString:SERVER_API];
               [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
                   dispatch_async(dispatch_get_main_queue(), ^{
                       if (err || !data) {
-                          self.statusLabel.text = @"الرادار معطل! (المس للتحديث)";
+                          self.statusLabel.text = @"فشل الالتحام بالسيرفر!";
                           self.statusLamp.backgroundColor = [UIColor redColor];
                           return;
                       }
+
                       NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                       if (!json) return;
 
-                      NSString *status = json[@"system_status"];
-                      NSString *message = json[@"notification"];
-                      if ([json[@"freeze_active"] intValue] == 1) { [self showLockdown:message]; return; }
-
-                      self.statusLabel.text = message;
-                      [self executeSovereignPatch:json[@"active_offsets"]];
-
-                      if ([status isEqualToString:@"safe"]) {
-                          self.statusLabel.textColor = [UIColor greenColor];
-                          self.statusLamp.backgroundColor = [UIColor greenColor];
-                          self.layer.borderColor = [UIColor greenColor].CGColor;
-                      } else {
-                          self.statusLabel.textColor = [UIColor redColor];
-                          self.statusLamp.backgroundColor = [UIColor redColor];
-                          self.layer.borderColor = [UIColor redColor].CGColor;
+                      // رصد مسارات الأنكوس وشادو
+                      uintptr_t shadowSlide = _dyld_get_image_vmaddr_slide(0);
+                      uintptr_t anogsSlide = 0;
+                      uint32_t count = _dyld_image_count();
+                      for (uint32_t i = 0; i < count; i++) {
+                          const char *name = _dyld_get_image_name(i);
+                          if (name && strstr(name, "anogs")) {
+                              anogsSlide = _dyld_get_image_vmaddr_slide(i);
+                              break;
+                          }
                       }
+
+                      NSArray *offsets = json[@"active_offsets"];
+                      for (NSDictionary *off in offsets) {
+                          uintptr_t base = ([off[@"target"] containsString:@"anogs"]) ? anogsSlide : shadowSlide;
+                          if (base != 0) {
+                              uintptr_t addr = strtoull([off[@"address"] UTF8String], NULL, 16);
+                              [self safePatch:(base + addr) hex:off[@"hex"]];
+                          }
+                      }
+
+                      self.statusLabel.text = json[@"notification"];
+                      self.statusLabel.textColor = [UIColor greenColor];
+                      self.statusLamp.backgroundColor = [UIColor greenColor];
+                      self.layer.borderColor = [UIColor greenColor].CGColor;
                   });
               }] resume];
           }
-
-          - (void)showLockdown:(NSString *)m {
-              UIWindow *win = [UIApplication sharedApplication].keyWindow;
-              if ([win viewWithTag:2026]) return;
-              UIView *v = [[UIView alloc] initWithFrame:win.bounds];
-              v.tag = 2026; v.backgroundColor = [UIColor blackColor];
-              UILabel *l = [[UILabel alloc] initWithFrame:v.bounds];
-              l.text = [NSString stringWithFormat:@"🛑 تجميد السيادة النشط:\n%@", m];
-              l.textColor = [UIColor whiteColor]; l.textAlignment = NSTextAlignmentCenter;
-              l.numberOfLines = 0; [v addSubview:l]; [win addSubview:v];
-          }
           @end
 
-          void __attribute__((constructor)) start_v600k_system() {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+          void __attribute__((constructor)) start_v900k_system() {
+              // تأخير 10 ثوانٍ لضمان تحميل كل الـ Frameworks وسحق الكراش
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   UIWindow *win = [UIApplication sharedApplication].keyWindow;
                   if (win) {
                       CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-                      // تمركز ثابت في أعلى المنتصف تحت الكاميرا
-                      SovereignStaticUI *ui = [[SovereignStaticUI alloc] initWithFrame:CGRectMake(sw/2 - 110, 45, 220, 36)];
+                      SovereignEliteUI *ui = [[SovereignEliteUI alloc] initWithFrame:CGRectMake(sw/2 - 110, 45, 220, 36)];
                       [win addSubview:ui];
                   }
               });
           }
           EOF
 
-      - name: "مرحلة الصهر المعماري (Clang ARM64)"
+      - name: "مرحلة الصهر المجهري (مع توليد رموز BugSplat)"
         run: |
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           
-          # صهر الدايلب السيادي مليمتر بمليمتر
-          clang -dynamiclib -arch arm64 sovereign_core.mm -o Sovereign_Static_Elite.dylib \
+          # إضافة خيار -g لتوليد الرموز (Debug Symbols) لرفعها لـ BugSplat
+          clang -dynamiclib -arch arm64 -g sovereign_core.mm -o Sovereign_Elite.dylib \
           -isysroot $SDK_PATH -framework Foundation -framework UIKit -framework CoreGraphics \
           -Wno-deprecated-declarations -fobjc-arc -lc++ -Os
           
-      - name: "تسليم السلاح المصفح"
+          # توليد ملف dSYM (هذا ما ترفعه لموقع BugSplat)
+          dsymutil Sovereign_Elite.dylib -o Sovereign_Elite.dylib.dSYM
+          
+      - name: "تسليم الغنائم (Dylib + dSYM لـ BugSplat)"
         uses: actions/upload-artifact@v4
         with:
-          name: Sovereign-Elite-Dylib
-          path: Sovereign_Static_Elite.dylib
+          name: Sovereign-Elite-Package
+          path: |
+            Sovereign_Elite.dylib
+            Sovereign_Elite.dylib.dSYM
