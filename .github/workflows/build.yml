@@ -1,4 +1,9 @@
-
+/**
+ * نظام Sovereign Elite Final v2100 (The Ultimate Sovereign Weapon)
+ * المصمم: المهندس وسام الصافي - البصرة / الناصرية
+ * الموقع الراداري الثابت: jojolmlm.hopto.org
+ * التقنية: Identity Spoofing, ACE Assassination (0x10b1d2860), & Dual-Lamp Status Radar
+ */
 
 #import <UIKit/UIKit.h>
 #import <mach-o/dyld.h>
