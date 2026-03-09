@@ -1,9 +1,3 @@
-/*
- * Sovereign Elite Core v3000 (The Ultimate Weapon)
- * Architect: General Wsam Al-Safi
- * Radar: jojolmlm.hopto.org
- * Tech: Identity Spoofing, ACE Assassination, & Dynamic Payload Injection
- */
 
 #import <UIKit/UIKit.h>
 #import <mach-o/dyld.h>
