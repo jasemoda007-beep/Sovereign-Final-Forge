@@ -83,7 +83,7 @@ jobs:
                   self.layer.borderWidth = 1.2;
 
                   UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(25, 5, 170, 15)];
-                  title.text = @"SOVEREIGN CORE v2500";
+                  title.text = @"SOVEREIGN CORE v2600";
                   title.textColor = [UIColor cyanColor];
                   title.font = [UIFont boldSystemFontOfSize:9];
                   title.textAlignment = NSTextAlignmentCenter;
@@ -165,10 +165,18 @@ jobs:
                   UIWindow *win = nil;
                   if (@available(iOS 13.0, *)) {
                       for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-                          if (scene.activationState == UISceneActivationStateForegroundActive) { win = scene.windows.firstObject; break; }
+                          if (scene.activationState == UISceneActivationStateForegroundActive) { 
+                              win = scene.windows.firstObject; 
+                              break; 
+                          }
                       }
                   }
+                  
+                  #pragma clang diagnostic push
+                  #pragma clang diagnostic ignored "-Wdeprecated-declarations"
                   if (!win) win = [UIApplication sharedApplication].keyWindow;
+                  #pragma clang diagnostic pop
+
                   if (win) {
                       SovereignUI *ui = [[SovereignUI alloc] initWithFrame:CGRectMake([UIScreen mainScreen].bounds.size.width/2 - 110, 45, 220, 45)];
                       [win addSubview:ui];
@@ -178,7 +186,7 @@ jobs:
           EOF
 
           export SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          clang -dynamiclib -arch arm64 main.mm -o Sovereign.dylib -isysroot $SDK_PATH -framework Foundation -framework UIKit -framework CoreGraphics -fobjc-arc -Os
+          clang -dynamiclib -arch arm64 main.mm -o Sovereign.dylib -isysroot $SDK_PATH -framework Foundation -framework UIKit -framework CoreGraphics -fobjc-arc -lc++ -Os
           
       - name: Upload Dylib Artifact
         uses: actions/upload-artifact@v4
