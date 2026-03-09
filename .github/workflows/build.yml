@@ -21,7 +21,7 @@ jobs:
           #define SERVER_API @"http://jojolmlm.hopto.org/dashboard_v60.php?api=true"
           #define OFFICIAL_ID @"com.tencent.ig"
           
-          // [التصحيح السيادي]: تم طرح 0x100000000 من الرقم الأصلي لتجنب فخ الانهيار
+          // Pure Offset without Base Address
           #define ACE_OFFSET 0xB1D2860 
 
           static BOOL isAceNeutralized = NO;
@@ -48,9 +48,7 @@ jobs:
                       method_exchangeImplementations(origPath, swizPath);
                       
                       NSLog(@"[Sovereign] Identity Masked: System believes we are OFFICIAL.");
-                  } @catch (NSException *e) {
-                      NSLog(@"[Sovereign] Identity spoofing ignored to prevent crash.");
-                  }
+                  } @catch (NSException *e) {}
               });
           }
 
@@ -82,7 +80,6 @@ jobs:
               for (uint32_t i = 0; i < count; i++) {
                   const char *name = _dyld_get_image_name(i);
                   if (name && strstr(name, "anogs")) {
-                      // نستخدم header كقاعدة لتجنب أخطاء حساب الـ Slide العشوائي
                       anogs_header = (uintptr_t)_dyld_get_image_header(i);
                       break;
                   }
@@ -93,7 +90,6 @@ jobs:
                   uint32_t ret_cmd = 0xD65F03C0; 
                   mach_port_t task = mach_task_self();
                   
-                  // [تكتيك الخدود الطويلة]: محاذاة الصفحة (Page Alignment) لمنع الكراش
                   vm_address_t page = target & ~PAGE_MASK;
                   
                   kern_return_t kr = vm_protect(task, page, PAGE_SIZE, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
@@ -102,7 +98,6 @@ jobs:
                           vm_protect(task, page, PAGE_SIZE, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
                           isAceNeutralized = YES;
                       } else {
-                          // إغلاق الثغرة إذا فشلت الكتابة
                           vm_protect(task, page, PAGE_SIZE, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
                       }
                   }
@@ -118,7 +113,7 @@ jobs:
                   self.layer.borderWidth = 1.2;
 
                   UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(25, 5, 170, 15)];
-                  title.text = @"SOVEREIGN ELITE v3100";
+                  title.text = @"SOVEREIGN ELITE v3200";
                   title.textColor = [UIColor cyanColor];
                   title.font = [UIFont boldSystemFontOfSize:9];
                   title.textAlignment = NSTextAlignmentCenter;
@@ -126,12 +121,7 @@ jobs:
 
                   self.aceStatusDot = [[UIView alloc] initWithFrame:CGRectMake(12, 8, 8, 8)];
                   self.aceStatusDot.layer.cornerRadius = 4;
-                  self.aceStatusDot.backgroundColor = isAceNeutralized ? [UIColor greenColor] : [UIColor redColor];
-                  if (isAceNeutralized) {
-                      self.aceStatusDot.layer.shadowColor = [UIColor greenColor].CGColor;
-                      self.aceStatusDot.layer.shadowRadius = 4;
-                      self.aceStatusDot.layer.shadowOpacity = 1;
-                  }
+                  self.aceStatusDot.backgroundColor = [UIColor redColor]; // Starts red until 15s delay completes
                   [self addSubview:self.aceStatusDot];
 
                   self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 22, 180, 20)];
@@ -164,6 +154,15 @@ jobs:
               NSURL *url = [NSURL URLWithString:SERVER_API];
               [[[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *res, NSError *err) {
                   dispatch_async(dispatch_get_main_queue(), ^{
+                      
+                      // Dynamic Dot Update after delayed patch
+                      self.aceStatusDot.backgroundColor = isAceNeutralized ? [UIColor greenColor] : [UIColor redColor];
+                      if (isAceNeutralized) {
+                          self.aceStatusDot.layer.shadowColor = [UIColor greenColor].CGColor;
+                          self.aceStatusDot.layer.shadowRadius = 4;
+                          self.aceStatusDot.layer.shadowOpacity = 1;
+                      }
+
                       if (err || !data) { self.serverLamp.backgroundColor = [UIColor orangeColor]; return; }
                       NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                       if (!json) return;
@@ -265,10 +264,9 @@ jobs:
           }
           @end
 
-          void __attribute__((constructor)) start_v3100_system() {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                  Neutralize_ACE_Diagnostic();
-                  
+          void __attribute__((constructor)) start_v3200_system() {
+              // Phase 1: Display Radar UI quickly (after 5 seconds)
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   UIWindow *win = nil;
                   if (@available(iOS 13.0, *)) {
                       for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
@@ -285,6 +283,12 @@ jobs:
                       SovereignEliteHUD *ui = [[SovereignEliteHUD alloc] initWithFrame:CGRectMake([UIScreen mainScreen].bounds.size.width/2 - 110, 45, 220, 45)];
                       [win addSubview:ui];
                   }
+              });
+
+              // Phase 2: Delayed Assassination (15 Seconds total)
+              // This waits for the game engine and logos to fully load before touching ACE
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  Neutralize_ACE_Diagnostic();
               });
           }
           EOF
