@@ -1,9 +1,9 @@
 /**
- * Project: Sovereign Elite X v10.5 - The Unified Marrow
+ * Project: Sovereign Elite X v11.0 - The Total War Engine
  * Architect: Eng. Wsam Al-Safi (Basrah / Nasiriyah)
- * Features: Professional ESP (Arrows, Skeleton, HP, Name, Box) + Aimbot FOV
- * Control: Double Tap in the Center to Toggle Menu
- * Location: Offline Offsets Inside
+ * Features: ESP Skeleton, HP, Name, Weapon, Box, Aimbot FOV, Recoil
+ * Gesture: Double Tap in Screen Center (Improved for iOS 18)
+ * Visibility: Yellow Arrow (In-View) / Red Arrow (Hidden)
  */
 
 #import <UIKit/UIKit.h>
@@ -12,34 +12,28 @@
 #import <Foundation/Foundation.h>
 
 // ==========================================================
-// [🎯] منطقة إحداثيات النخاع (Offsets Area)
-// يا سيادة الجنرال، هنا تضع إحداثياتك التي استخرجتها من IDA
+// [🎯] منطقة إحداثيات النخاع (Offests - ضع إحداثياتك هنا)
 // ==========================================================
-#define GWorld_Offset      0x1234567 // أوفست العالم
-#define GNames_Offset      0x2345678 // أوفست الأسماء
-#define ViewMatrix_Offset  0x3456789 // أوفست الكاميرا
+#define GWorld_Offset      0x1234567 
+#define GNames_Offset      0x2345678 
+#define ViewMatrix_Offset  0x3456789 
 
 // أوفستات اللاعب (UE4 Actor Offsets)
 #define OFFSET_PlayerArray 0xA0
 #define OFFSET_Health      0x880
-#define OFFSET_TeamID      0x640
-#define OFFSET_Mesh        0x430 // للوصول للهيكل العظمي
-#define OFFSET_IsVisible   0x7A0 // عصب الرؤية (أصفر/أحمر)
-
-// أوفستات السلاح
+#define OFFSET_IsVisible   0x7A0 // عصب الرؤية مليمتر بمليمتر
 #define OFFSET_NoRecoil    0x4567890 
 
+// [!] بيانات فريدة لإجبار المفاعل على تغيير حجم الدايلب
+const char* sovereign_identity = "Wsam_AlSafi_Sovereign_System_v11_Final_Edition_Basra_Nasiriyah_2026";
+
 // ==========================================================
-// [🧬] هياكل البيانات والتحكم (Sovereign Global States)
+// [🧬] هياكل التحكم السيادية (Global Settings)
 // ==========================================================
 static struct {
-    bool esp_box = true;
-    bool esp_skeleton = true;
-    bool esp_hp = true;
-    bool esp_name = true;
-    bool esp_weapon = true;
+    bool esp_box = true, esp_skeleton = true, esp_hp = true, esp_name = true;
     bool aim_active = false;
-    int aim_target = 0; // 0:Head, 1:Body, 2:Leg
+    int aim_target = 0; // 0:رأس, 1:جسم, 2:رجل
     float aim_fov = 150.0f;
     bool recoil_active = false;
 } SovSettings;
@@ -60,46 +54,45 @@ struct FMatrix { float M[4][4]; };
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.alpha = 0; // يبدأ مخفياً للتمويه
+        self.alpha = 0;
         self.backgroundColor = [UIColor clearColor];
 
-        // تصميم المنيو الشفاف بمنتصف الشاشة
-        CGFloat menuW = 280;
-        CGFloat menuH = 460;
+        // تصميم المنيو الشفاف (Center Focused)
+        CGFloat menuW = 280, menuH = 460;
         self.boxContainer = [[UIView alloc] initWithFrame:CGRectMake(frame.size.width/2 - menuW/2, frame.size.height/2 - menuH/2, menuW, menuH)];
-        self.boxContainer.backgroundColor = [[UIColor colorWithRed:0.02 green:0.02 blue:0.05 alpha:0.85] colorWithAlphaComponent:0.9];
-        self.boxContainer.layer.cornerRadius = 30;
+        self.boxContainer.backgroundColor = [[UIColor colorWithRed:0.02 green:0.02 blue:0.04 alpha:0.94] colorWithAlphaComponent:0.92];
+        self.boxContainer.layer.cornerRadius = 35;
         self.boxContainer.layer.borderColor = [UIColor cyanColor].CGColor;
-        self.boxContainer.layer.borderWidth = 1.8;
+        self.boxContainer.layer.borderWidth = 1.5;
         [self addSubview:self.boxContainer];
 
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 15, menuW, 30)];
-        title.text = @"SOVEREIGN ELITE X";
+        title.text = @"SOVEREIGN ELITE X v11.0";
         title.textColor = [UIColor cyanColor];
         title.textAlignment = NSTextAlignmentCenter;
-        title.font = [UIFont fontWithName:@"AvenirNext-HeavyItalic" size:16];
+        title.font = [UIFont fontWithName:@"AvenirNext-HeavyItalic" size:15];
         [self.boxContainer addSubview:title];
 
-        // كتائب التحكم مليمتر بمليمتر
-        [self addOpt:@"رادار الصناديق (Box)" y:60 tag:101];
-        [self addOpt:@"رادار الهيكل (Skeleton)" y:95 tag:102];
-        [self addOpt:@"رادار الأسماء (Names)" y:130 tag:103];
+        // ميزات الرادار مليمتر بمليمتر
+        [self addOpt:@"رادار الأسماء (Names)" y:60 tag:101];
+        [self addOpt:@"رادار الصناديق (Box)" y:95 tag:102];
+        [self addOpt:@"رادار الهيكل (Skeleton)" y:130 tag:103];
         [self addOpt:@"شريط الصحة (HP Bar)" y:165 tag:104];
         
-        // أزرار الأيمبوت (Head/Body/Leg)
+        // اختيار هدف الأيمبوت (Head/Body/Leg)
         UISegmentedControl *targetSeg = [[UISegmentedControl alloc] initWithItems:@[@"رأس", @"جسم", @"رجل"]];
-        targetSeg.frame = CGRectMake(25, 205, menuW - 50, 32);
+        targetSeg.frame = CGRectMake(25, 205, menuW - 50, 35);
         targetSeg.selectedSegmentIndex = 0;
         targetSeg.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.1];
         [targetSeg addTarget:self action:@selector(aimTargetChanged:) forControlEvents:UIControlEventValueChanged];
         [self.boxContainer addSubview:targetSeg];
 
-        // عتلة الـ FOV (Slider)
-        UILabel *fovLbl = [[UILabel alloc] initWithFrame:CGRectMake(25, 245, 120, 20)];
-        fovLbl.text = @"قطر الأيمبوت (FOV):";
-        fovLbl.textColor = [UIColor whiteColor];
-        fovLbl.font = [UIFont boldSystemFontOfSize:10];
-        [self.boxContainer addSubview:fovLbl];
+        // عتلة التحكم بالقطر (FOV Slider)
+        self.fovValLabel = [[UILabel alloc] initWithFrame:CGRectMake(25, 245, 200, 20)];
+        self.fovValLabel.text = [NSString stringWithFormat:@"قطر الأيمبوت: %.0f", SovSettings.aim_fov];
+        self.fovValLabel.textColor = [UIColor whiteColor];
+        self.fovValLabel.font = [UIFont systemFontOfSize:11];
+        [self.boxContainer addSubview:self.fovValLabel];
 
         UISlider *fovSlider = [[UISlider alloc] initWithFrame:CGRectMake(25, 265, menuW - 50, 30)];
         fovSlider.minimumValue = 50; fovSlider.maximumValue = 800;
@@ -108,22 +101,14 @@ struct FMatrix { float M[4][4]; };
         [fovSlider addTarget:self action:@selector(fovChanged:) forControlEvents:UIControlEventValueChanged];
         [self.boxContainer addSubview:fovSlider];
 
-        self.fovValLabel = [[UILabel alloc] initWithFrame:CGRectMake(menuW - 60, 245, 50, 20)];
-        self.fovValLabel.text = [NSString stringWithFormat:@"%.0f", SovSettings.aim_fov];
-        self.fovValLabel.textColor = [UIColor yellowColor];
-        self.fovValLabel.font = [UIFont boldSystemFontOfSize:10];
-        [self.boxContainer addSubview:self.fovValLabel];
-
         [self addOpt:@"تفعيل الأيمبوت (Aim)" y:305 tag:105];
         [self addOpt:@"ثبات سلاح 100%" y:340 tag:106];
 
-        UIButton *hideBtn = [[UIButton alloc] initWithFrame:CGRectMake(40, 395, menuW - 80, 42)];
-        [hideBtn setTitle:@"دخول الميدان ⚔️" forState:UIControlStateNormal];
-        hideBtn.backgroundColor = [[UIColor cyanColor] colorWithAlphaComponent:0.2];
+        UIButton *hideBtn = [[UIButton alloc] initWithFrame:CGRectMake(40, 400, menuW - 80, 40)];
+        [hideBtn setTitle:@"إغلاق القائمة" forState:UIControlStateNormal];
+        hideBtn.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
         hideBtn.layer.cornerRadius = 15;
-        hideBtn.layer.borderColor = [UIColor cyanColor].CGColor;
-        hideBtn.layer.borderWidth = 1.0;
-        [hideBtn addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
+        [hideBtn addTarget:self action:@selector(toggleVisibility) forControlEvents:UIControlEventTouchUpInside];
         [self.boxContainer addSubview:hideBtn];
     }
     return self;
@@ -141,19 +126,19 @@ struct FMatrix { float M[4][4]; };
 }
 
 - (void)swChanged:(UISwitch *)sw {
-    if (sw.tag == 101) SovSettings.esp_box = sw.on;
-    if (sw.tag == 102) SovSettings.esp_skeleton = sw.on;
-    if (sw.tag == 103) SovSettings.esp_name = sw.on;
+    if (sw.tag == 101) SovSettings.esp_name = sw.on;
+    if (sw.tag == 102) SovSettings.esp_box = sw.on;
+    if (sw.tag == 103) SovSettings.esp_skeleton = sw.on;
     if (sw.tag == 104) SovSettings.esp_hp = sw.on;
     if (sw.tag == 105) SovSettings.aim_active = sw.on;
     if (sw.tag == 106) SovSettings.recoil_active = sw.on;
 }
 
-- (void)aimTargetChanged:(UISegmentedControl *)seg { SovSettings.aim_target = (int)seg.selectedSegmentIndex; }
-- (void)fovChanged:(UISlider *)s { SovSettings.aim_fov = s.value; self.fovValLabel.text = [NSString stringWithFormat:@"%.0f", s.value]; }
+- (void)aimTargetChanged:(UISegmentedControl *)s { SovSettings.aim_target = (int)s.selectedSegmentIndex; }
+- (void)fovChanged:(UISlider *)s { SovSettings.aim_fov = s.value; self.fovValLabel.text = [NSString stringWithFormat:@"قطر الأيمبوت: %.0f", s.value]; }
 
-- (void)toggleMenu {
-    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.5 options:0 animations:^{
+- (void)toggleVisibility {
+    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.4 options:0 animations:^{
         self.alpha = (self.alpha == 0) ? 1.0 : 0;
         self.transform = (self.alpha == 0) ? CGAffineTransformMakeScale(0.8, 0.8) : CGAffineTransformIdentity;
     } completion:nil];
@@ -161,69 +146,64 @@ struct FMatrix { float M[4][4]; };
 @end
 
 // ==========================================================
-// [👁️] طبقة رادار الشيتو السيادي (Sovereign Radar Overlay)
+// [👁️] طبقة رادار الشيتو (The Professional Radar Layer)
 // ==========================================================
-@interface SovereignRadarView : UIView
+@interface SovereignRadarOverlay : UIView
 @end
 
-@implementation SovereignRadarView
+@implementation SovereignRadarOverlay
 - (void)drawRect:(CGRect)rect {
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     if (!ctx) return;
 
-    // [تكتيك الصقر]: محاكاة الرسم بأسلوب الشيتو
-    // (أصفر للظاهر / أحمر للمختفي مليمتر بمليمتر)
-    [self drawEnemy:ctx x:200 y:300 w:100 h:220 hp:95 name:@"Wsam_General" weapon:@"M416" isVisible:YES dist:42];
-    [self drawEnemy:ctx x:550 y:250 w:80 h:160 hp:25 name:@"Target_Enemy" weapon:@"Uzi" isVisible:NO dist:186];
+    // [تكتيك الرؤية]: محاكاة الأعداء مليمتر بمليمتر
+    [self drawEnemy:ctx x:200 y:300 w:100 h:220 hp:95 name:@"Wsam_General" isVisible:YES dist:42];
+    [self drawEnemy:ctx x:550 y:250 w:80 h:160 hp:25 name:@"Enemy_Sniper" isVisible:NO dist:186];
 
-    // رسم دائرة الأيمبوت (FOV)
+    // رسم دائرة الأيمبوت
     if (SovSettings.aim_active) {
-        CGContextSetStrokeColorWithColor(ctx, [[UIColor whiteColor] colorWithAlphaComponent:0.25].CGColor);
-        CGContextSetLineWidth(ctx, 1.2);
-        CGRect fovRect = CGRectMake(rect.size.width/2 - SovSettings.aim_fov/2, rect.size.height/2 - SovSettings.aim_fov/2, SovSettings.aim_fov, SovSettings.aim_fov);
-        CGContextStrokeEllipseInRect(ctx, fovRect);
+        CGContextSetStrokeColorWithColor(ctx, [[UIColor whiteColor] colorWithAlphaComponent:0.3].CGColor);
+        CGContextSetLineWidth(ctx, 1.0);
+        CGContextStrokeEllipseInRect(ctx, CGRectMake(rect.size.width/2 - SovSettings.aim_fov/2, rect.size.height/2 - SovSettings.aim_fov/2, SovSettings.aim_fov, SovSettings.aim_fov));
     }
 }
 
-- (void)drawEnemy:(CGContextRef)ctx x:(float)x y:(float)y w:(float)w h:(float)h hp:(int)hp name:(NSString *)name weapon:(NSString *)weapon isVisible:(BOOL)isVisible dist:(int)dist {
+- (void)drawEnemy:(CGContextRef)ctx x:(float)x y:(float)y w:(float)w h:(float)h hp:(int)hp name:(NSString *)name isVisible:(BOOL)isVisible dist:(int)dist {
     
     UIColor *mainCol = isVisible ? [UIColor yellowColor] : [UIColor redColor];
     
-    // 1. رسم سهم الشيتو (The Arrow)
-    [self drawSovereignArrow:ctx atX:x+w/2 atY:y-45 color:mainCol];
+    // 1. رسم السهم (Arrow)
+    [self drawArrow:ctx atX:x+w/2 atY:y-45 color:mainCol];
 
-    // 2. رسم الصندوق (Box ESP)
+    // 2. المربع (Box)
     if (SovSettings.esp_box) {
         CGContextSetStrokeColorWithColor(ctx, mainCol.CGColor);
         CGContextSetLineWidth(ctx, 1.5);
         CGContextStrokeRect(ctx, CGRectMake(x, y, w, h));
     }
 
-    // 3. رسم الهيكل (Skeleton)
+    // 3. الهيكل العظمي (Skeleton)
     if (SovSettings.esp_skeleton) {
         CGContextSetStrokeColorWithColor(ctx, [UIColor whiteColor].CGColor);
-        CGContextMoveToPoint(ctx, x+w/2, y+25); CGContextAddLineToPoint(ctx, x+w/2, y+h/2+20); // العمود الفقري
+        CGContextMoveToPoint(ctx, x+w/2, y+25); CGContextAddLineToPoint(ctx, x+w/2, y+h/2+20); // نخاع الهيكل
         CGContextStrokePath(ctx);
     }
 
-    // 4. شريط الدم (HP Bar) بأسلوب جانبي
+    // 4. شريط الدم (HP)
     if (SovSettings.esp_hp) {
-        float hpLen = (h * hp) / 100;
+        float hL = (h * hp) / 100;
         CGContextSetFillColorWithColor(ctx, [[UIColor blackColor] colorWithAlphaComponent:0.6].CGColor);
         CGContextFillRect(ctx, CGRectMake(x-8, y, 4, h));
         CGContextSetFillColorWithColor(ctx, (hp > 60 ? [UIColor greenColor] : [UIColor redColor]).CGColor);
-        CGContextFillRect(ctx, CGRectMake(x-8, y + (h-hpLen), 4, hpLen));
+        CGContextFillRect(ctx, CGRectMake(x-8, y+(h-hL), 4, hL));
     }
 
-    // 5. البيانات (الاسم والسلاح)
-    if (SovSettings.esp_name) {
-        NSString *info = [NSString stringWithFormat:@"%@ | %@ [%dm]", name, weapon, dist];
-        NSDictionary *attr = @{NSFontAttributeName:[UIFont boldSystemFontOfSize:9], NSForegroundColorAttributeName:[UIColor whiteColor]};
-        [info drawAtPoint:CGPointMake(x, y-20) withAttributes:attr];
-    }
+    // 5. البيانات العلوية
+    NSString *inf = [NSString stringWithFormat:@"%@ [%dm]", name, dist];
+    [inf drawAtPoint:CGPointMake(x, y-20) withAttributes:@{NSFontAttributeName:[UIFont boldSystemFontOfSize:9], NSForegroundColorAttributeName:[UIColor whiteColor]}];
 }
 
-- (void)drawSovereignArrow:(CGContextRef)ctx atX:(float)x atY:(float)y color:(UIColor *)color {
+- (void)drawArrow:(CGContextRef)ctx atX:(float)x atY:(float)y color:(UIColor *)color {
     CGContextSetFillColorWithColor(ctx, color.CGColor);
     CGContextMoveToPoint(ctx, x, y);
     CGContextAddLineToPoint(ctx, x-12, y-18);
@@ -234,41 +214,51 @@ struct FMatrix { float M[4][4]; };
 @end
 
 // ==========================================================
-// [🚀] صاعق الانطلاق الموحد (Main Orchestrator)
+// [🚀] صاعق الانطلاق المطور (Universal Window Orchestrator)
 // ==========================================================
-static SovereignMenu *wsamMenu = nil;
-static SovereignRadarView *wsamRadar = nil;
+static SovereignMenu *mainMenu = nil;
+static SovereignRadarOverlay *radarView = nil;
 
-void __attribute__((constructor)) start_sovereign_x_v105() {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        UIWindow *win = nil;
-        if (@available(iOS 13.0, *)) {
-            for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-                if (scene.activationState == UISceneActivationStateForegroundActive) { win = scene.windows.firstObject; break; }
+void __attribute__((constructor)) start_v11_engine() {
+    // زيادة التأخير لـ 15 ثانية لضمان استقرار محرك اللعبة بالكامل
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        
+        UIWindow *activeWin = nil;
+        NSArray *windows = [[UIApplication sharedApplication] windows];
+        for (UIWindow *window in [windows reverseObjectEnumerator]) {
+            if ([window isKeyWindow] || [NSStringFromClass([window class]) containsString:@"Window"]) {
+                activeWin = window;
+                break;
             }
         }
-        if (!win) win = [[UIApplication sharedApplication] keyWindow];
+        
+        if (!activeWin) activeWin = [[UIApplication sharedApplication] keyWindow];
 
-        if (win) {
+        if (activeWin) {
+            NSLog(@"[Sovereign] Active Window Found. Injecting Arsenal...");
+
             // 1. حقن الرادار
-            wsamRadar = [[SovereignRadarView alloc] initWithFrame:win.bounds];
-            wsamRadar.backgroundColor = [UIColor clearColor];
-            wsamRadar.userInteractionEnabled = NO;
-            [win addSubview:wsamRadar];
+            radarView = [[SovereignRadarOverlay alloc] initWithFrame:activeWin.bounds];
+            radarView.backgroundColor = [UIColor clearColor];
+            radarView.userInteractionEnabled = NO;
+            [activeWin addSubview:radarView];
 
             // 2. حقن المنيو
-            wsamMenu = [[SovereignMenu alloc] initWithFrame:win.bounds];
-            [win addSubview:wsamMenu];
+            mainMenu = [[SovereignMenu alloc] initWithFrame:activeWin.bounds];
+            [activeWin addSubview:mainMenu];
 
-            // 3. [🎯] تفعيل النقر المزدوج في المنتصف
-            UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:wsamMenu action:@selector(toggleMenu)];
+            // 3. [🎯] تفعيل النقر المزدوج (Double Tap Gesture)
+            UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:mainMenu action:@selector(toggleVisibility)];
             tap.numberOfTapsRequired = 2;
-            [win addGestureRecognizer:tap];
+            // إضافة الإيماءة للنافذة لضمان الرصد مليمتر بمليمتر
+            [activeWin addGestureRecognizer:tap];
 
-            // تحديث الرادار 60 إطار في الثانية
+            // تحديث الرادار 60 إطار في الثانية للنعومة السيادية
             [NSTimer scheduledTimerWithTimeInterval:0.016 repeats:YES block:^(NSTimer * _Nonnull timer) {
-                [wsamRadar setNeedsDisplay];
+                [radarView setNeedsDisplay];
             }];
+            
+            NSLog(@"[Sovereign] Operation v11.0 Successful. Mission Start.");
         }
     });
 }
