@@ -1,4 +1,4 @@
-name: Dragon Shadow Imperial Smelter V8.0
+name: Dragon Shadow Imperial Smelter V8.1
 
 on:
   push:
@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # تحديث إلى v4
 
       - name: Smelt Imperial C++ Code
         run: |
@@ -26,9 +26,6 @@ jobs:
 
           using namespace std;
 
-          // ==========================================================
-          // 1. [محرك الذاكرة الشبح] - كسر الحماية وإعادتها فوراً
-          // ==========================================================
           namespace ImperialStealth {
               uintptr_t GetBase() {
                   return (uintptr_t)_dyld_get_image_header(0);
@@ -38,47 +35,32 @@ jobs:
                   uintptr_t target = GetBase() + offset;
                   uintptr_t page = target & ~(PAGE_SIZE - 1);
 
-                  // فتح الذاكرة (RWX)
                   if (mprotect((void*)page, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
                       *(uint32_t*)target = instruction;
-                      // إغلاق الذاكرة فوراً (RX) لإخفاء الأثر عن الفحص الدوري
                       mprotect((void*)page, PAGE_SIZE, PROT_READ | PROT_EXEC);
                       printf("[✔] Shadow Patch Applied: 0x%lx\n", offset);
                   }
               }
           }
 
-          // ==========================================================
-          // 2. [منظومة تخدير الحماية] - إخراس GTrace ودوائر التبليغ
-          // ==========================================================
           void InitializeDragonEngine() {
-              // RET instruction (ARM64): 0xD65F03C0
-              uint32_t kill_code = 0xD65F03C0;
+              uint32_t kill_code = 0xD65F03C0; // RET ARM64
 
-              // [أ] تخدير الدالة المعقدة التي أرسلتها (sub_10018F04C)
-              // وظيفتها: فك الوايت لست وتتبع الأهداف - الحالة: إخراس تام
+              // تخدير الدالة المعقدة sub_10018F04C
               ImperialStealth::SilentPatch(0x18F04C, kill_code);
 
-              // [ب] تخدير محرك التقارير (sub_1000E87A4)
-              // وظيفتها: إرسال اللوغات الجنائية للسيرفر - الحالة: قطع الاتصال
+              // تخدير محرك التقارير sub_1000E87A4
               ImperialStealth::SilentPatch(0xE87A4, kill_code);
 
-              // [ج] تخدير جالب المود (sub_100146C78)
-              // نجبره يرجع 0 (تعطيل) بدل ما يقرأ TargetMode من السيرفر
-              // MOV X0, #0: 0xD2800000 | RET: 0xD65F03C0
-              // سنستخدم RET فقط كبداية سريعة وآمنة
+              // تخدير جالب المود sub_100146C78
               ImperialStealth::SilentPatch(0x146C78, kill_code);
 
-              printf("[🐲] تم صهر الأكواد.. النظام يظهر للسيرفر كـ (رسمي/Official)\n");
+              printf("[🐲] تم صهر الأكواد بنجاح.. النظام محصن الآن!\n");
           }
 
-          // ==========================================================
-          // 3. [محرك الحقن الذاتي] - التشغيل قبل بدء الحماية
-          // ==========================================================
           __attribute__((constructor))
           static void dragon_entry() {
               thread([]() {
-                  // تأخير بسيط لضمان فك ضغط اللعبة في الرام
                   this_thread::sleep_for(chrono::seconds(4));
                   InitializeDragonEngine();
               }).detach();
@@ -94,7 +76,8 @@ jobs:
           -framework Foundation
 
       - name: Upload Imperial Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # تحديث إلى v4 وهو المطلوب لحل المشكلة
         with:
           name: Imperial-Falcon-Bypass
           path: ShadowImperial.dylib
+          
