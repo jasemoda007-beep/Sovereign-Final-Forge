@@ -1,4 +1,4 @@
-name: Standalone Security Bypass - Delay 5s
+name: Falcon Shadow Dylib - Standalone 5s
 
 on:
   push:
@@ -6,71 +6,101 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_standalone:
+  build_falcon:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create Source Code
+      - name: Create Falcon Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
           #include <mach-o/dyld.h>
           #include <mach/mach.h>
+          #include <objc/runtime.h>
           #include <stdint.h>
 
-          // --- [ وظيفة كتابة الذاكرة الآمنة ] ---
-          void PatchMemory(uintptr_t address, uint32_t instruction) {
-              mach_port_t task = mach_task_self();
-              vm_address_t page_start = trunc_page(address);
-              vm_size_t page_size = page_size; 
+          // ==========================================
+          // [ تعريفات الهوكات - الأدوات ]
+          // ==========================================
+          uintptr_t get_Base() { return (uintptr_t)_dyld_get_image_header(0); }
 
-              kern_return_t kr = vm_protect(task, page_start, page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
-              if (kr == KERN_SUCCESS) {
-                  *(uint32_t *)address = instruction;
-                  vm_protect(task, page_start, page_size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+          void Patch(uintptr_t addr, uint32_t data) {
+              vm_address_t page_start = trunc_page(addr);
+              vm_size_t page_sz = page_size;
+              if (vm_protect(mach_task_self(), page_start, page_sz, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY) == KERN_SUCCESS) {
+                  *(uint32_t *)addr = data;
+                  vm_protect(mach_task_self(), page_start, page_sz, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
               }
           }
 
-          // --- [ المهمة الأساسية: تخدير sub_4C18 ] ---
-          void DisableSecurityCollector() {
-              uintptr_t baseAddr = (uintptr_t)_dyld_get_image_header(0);
-              uintptr_t targetFunc = baseAddr + 0x4C18; 
-
-              // MOV X0, #0 -> 0xD2800000 
-              // RET       -> 0xD65F03C0 
-
-              PatchMemory(targetFunc, 0xD2800000);     
-              PatchMemory(targetFunc + 4, 0xD65F03C0); 
-              
-              printf("🚀 [GHOST] sub_4C18 Neutered after 5s delay.\n");
+          // ==========================================
+          // [ الطبقة 1: تصفير المخبر السري sub_4C18 ]
+          // ==========================================
+          void Layer_Informant_Bypass() {
+              uintptr_t target = get_Base() + 0x4C18;
+              Patch(target, 0xD2800000);     // MOV X0, #0
+              Patch(target + 4, 0xD65F03C0); // RET
           }
 
-          // --- [ نقطة الانطلاق مع تأخير 5 ثواني ] ---
+          // ==========================================
+          // [ الطبقة 2: تخدير غرفة العمليات sub_11B060 ]
+          // ==========================================
+          void Layer_Brain_Bypass() {
+              uintptr_t target = get_Base() + 0x11B060;
+              // هنا نخليه يرجع 0 حتى يطفي الـ vTable checks
+              Patch(target, 0xD2800000); 
+              Patch(target + 4, 0xD65F03C0);
+          }
+
+          // ==========================================
+          // [ الطبقة 3: فلترة البلاغات sub_102B84 ]
+          // ==========================================
+          // ملاحظة: الـ Patching هنا أصعب لأنها دالة تسجيل، نكتفي بتعطيلها مؤقتاً
+          void Layer_Reporter_Bypass() {
+              uintptr_t target = get_Base() + 0x102B84;
+              Patch(target, 0xD65F03C0); // RET (إخراس الدالة فوراً)
+          }
+
+          // ==========================================
+          // [ الطبقة 4: مكان الهوكات الجديدة (إضافة مسعود) ]
+          // ==========================================
+          void Layer_Custom_New_Hooks() {
+              // ضلعي مسعود.. هنا تقدر تضيف أي أوفست جديد تكتشفه بـ IDA
+              // مثال: uintptr_t myTarget = get_Base() + 0xXXXXXX;
+          }
+
+          // ==========================================
+          // [ المحرك الرئيسي - التشغيل بعد 5 ثواني ]
+          // ==========================================
           __attribute__((constructor))
-          static void entry() {
-              // خليه 5 ثواني يتاخر مثل ما طلبت يا بطل
+          static void Falcon_Ghost_Init() {
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                  DisableSecurityCollector();
+                  
+                  Layer_Informant_Bypass();
+                  Layer_Brain_Bypass();
+                  Layer_Reporter_Bypass();
+                  Layer_Custom_New_Hooks();
+
+                  printf("🛡️ [FALCON-SHADOW] All layers active after 5s delay.\n");
               });
           }
           EOF
 
-      - name: Compile Standalone Dylib
+      - name: Build Falcon Dylib
         run: |
           clang++ -dynamiclib -std=c++11 \
           -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 \
-          jni/main.mm -o SecurityBypass.dylib \
+          jni/main.mm -o FalconShadow.dylib \
           -framework Foundation -lobjc
 
-      - name: Upload Artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Standalone-Bypass-5s
-          path: SecurityBypass.dylib
-          
+          name: Falcon-Shadow-V1
+          path: FalconShadow.dylib
