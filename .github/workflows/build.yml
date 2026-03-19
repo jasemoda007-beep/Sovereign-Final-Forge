@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V25.1
+name: Imperial Ultimate AIO - V25.2
 
 on:
   push:
@@ -24,6 +24,9 @@ jobs:
           #include <objc/runtime.h>
           #include <stdint.h>
           #include <sys/stat.h>
+
+          // تعريف لون ذهبي إمبراطوري مخصص
+          #define ImperialGold [UIColor colorWithRed:1.0 green:0.84 blue:0.0 alpha:1.0]
 
           // ==========================================
           // [ 1. رادار الـ VPS ورفع الملفات ]
@@ -159,8 +162,9 @@ jobs:
               self.panel = [[UIView alloc] initWithFrame:CGRectMake(50, 170, 220, 280)];
               self.panel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.95];
               self.panel.layer.cornerRadius = 12;
-              self.panel.layer.borderWidth = 1;
-              self.panel.layer.borderColor = [UIColor goldColor].CGColor;
+              self.panel.layer.borderWidth = 2;
+              // تصليح اللون الذهبي هنا
+              self.panel.layer.borderColor = ImperialGold.CGColor;
               self.panel.hidden = YES;
               [self addSubview:self.panel];
 
@@ -174,7 +178,8 @@ jobs:
               UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
               b.frame = CGRectMake(10, y, 200, 40);
               [b setTitle:t forState:UIControlStateNormal];
-              [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+              // استخدام اللون الذهبي للنصوص أيضاً ليعطي منظراً أجمل
+              [b setTitleColor:ImperialGold forState:UIControlStateNormal];
               [b addTarget:self action:s forControlEvents:UIControlEventTouchUpInside];
               [self.panel addSubview:b];
           }
