@@ -21,6 +21,7 @@ jobs:
           #include <iostream>
           #include <thread>
           #include <chrono>
+          #include <objc/runtime.h>
           #include <dlfcn.h>
           #include <mach-o/dyld.h>
           #include <sys/mman.h>
