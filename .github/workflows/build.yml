@@ -1,4 +1,4 @@
-name: Imperial Shadow - Ghost V16.7
+name: Standalone Security Bypass - Delay 5s
 
 on:
   push:
@@ -6,138 +6,71 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_shadow_engine:
+  build_standalone:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Smelt Imperial Ghost V16.7
+      - name: Create Source Code
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
-          #include <iostream>
-          #include <thread>
-          #include <chrono>
-          #include <objc/runtime.h>
-          #include <dlfcn.h>
           #include <mach-o/dyld.h>
-          #include <sys/mman.h>
-          #include <sys/stat.h>
+          #include <mach/mach.h>
+          #include <stdint.h>
 
-          using namespace std;
+          // --- [ وظيفة كتابة الذاكرة الآمنة ] ---
+          void PatchMemory(uintptr_t address, uint32_t instruction) {
+              mach_port_t task = mach_task_self();
+              vm_address_t page_start = trunc_page(address);
+              vm_size_t page_size = page_size; 
 
-          // --- [ ميزة الـ Interpose ] ---
-          typedef struct interpose_substitution {
-              const void* replacement;
-              const void* original;
-          } interpose_substitution_t;
-
-          #define DYLD_INTERPOSE(_replacement,_original) \
-             __attribute__((used)) static const interpose_substitution_t _interpose_##_original \
-             __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
-
-          // --- [ رادار الـ VPS ] ---
-          void RemoteLog(NSString *type, NSString *info, bool success) {
-              NSString *url = @"http://34.204.178.160:5000/log"; 
-              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
-              [req setHTTPMethod:@"POST"];
-              [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-              NSString *icon = success ? @"✅" : @"❌";
-              NSString *fullMsg = [NSString stringWithFormat:@"%@ [%@] -> %@", icon, type, info];
-              NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"content": fullMsg} options:0 error:nil];
-              [req setHTTPBody:data];
-              [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-          }
-
-          // --- [ 1. تزييف الهوية ] ---
-          @interface NSBundle (Imperial)
-          - (NSString *)my_bundleIdentifier;
-          @end
-          @implementation NSBundle (Imperial)
-          - (NSString *)my_bundleIdentifier { return @"com.tencent.ig"; }
-          @end
-
-          // --- [ 2. صائد الذاكرة ] ---
-          void* my_memcpy(void* dest, const void* src, size_t n) {
-              if (n > 1024) { 
-                  static bool captured = false;
-                  if (!captured) {
-                      RemoteLog(@"MEMORY", [NSString stringWithFormat:@"Captured Buffer: %zu bytes", n], true);
-                      captured = true;
-                  }
+              kern_return_t kr = vm_protect(task, page_start, page_size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
+              if (kr == KERN_SUCCESS) {
+                  *(uint32_t *)address = instruction;
+                  vm_protect(task, page_start, page_size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
               }
-              return memcpy(dest, src, n);
           }
-          DYLD_INTERPOSE(my_memcpy, memcpy);
 
-          // --- [ 3. تزييف وجود الملفات (Spoofing Stat) ] ---
-          int my_stat(const char *path, struct stat *buf) {
-              if (path) {
-                  // إخفاء كل الملفات الحساسة اللي ذكرتها
-                  if (strstr(path, "ano") || strstr(path, "tss") || strstr(path, "apollo") || 
-                      strstr(path, "GCloud") || strstr(path, ".log") || strstr(path, "comm.dat") ||
-                      strstr(path, "filelist") || strstr(path, "config.json") || strstr(path, "functions.data") ||
-                      strstr(path, "embedded.mobileprovision") || strstr(path, ".metallib")) {
-                      
-                      RemoteLog(@"GHOST_STAT", [NSString stringWithFormat:@"File Hidden: %s", path], true);
-                      return -1; // إيهام اللعبة بأن الملف غير موجود
-                  }
-              }
-              return stat(path, buf);
+          // --- [ المهمة الأساسية: تخدير sub_4C18 ] ---
+          void DisableSecurityCollector() {
+              uintptr_t baseAddr = (uintptr_t)_dyld_get_image_header(0);
+              uintptr_t targetFunc = baseAddr + 0x4C18; 
+
+              // MOV X0, #0 -> 0xD2800000 
+              // RET       -> 0xD65F03C0 
+
+              PatchMemory(targetFunc, 0xD2800000);     
+              PatchMemory(targetFunc + 4, 0xD65F03C0); 
+              
+              printf("🚀 [GHOST] sub_4C18 Neutered after 5s delay.\n");
           }
-          DYLD_INTERPOSE(my_stat, stat);
 
-          // --- [ 4. تزييف قراءة وكتابة الملفات (Spoofing Open) ] ---
-          FILE* my_fopen(const char* path, const char* mode) {
-              if (path) {
-                  // قائمة الملفات المستهدفة للتزييف والحظر
-                  bool target = (strstr(path, "ano") || strstr(path, "tss") || strstr(path, "apollo") || 
-                                 strstr(path, "GCloud") || strstr(path, "config.json") || strstr(path, "RemoteConfig") ||
-                                 strstr(path, "filelist") || strstr(path, "functions.data") || strstr(path, "comm.dat") ||
-                                 strstr(path, "APMSDKCache") || strstr(path, ".log"));
-
-                  if (target) {
-                      // أ- إذا كانت اللعبة تريد الكتابة (التجسس علينا): وجهها للعدم
-                      if (strstr(mode, "w") || strstr(mode, "a") || strstr(mode, "+")) {
-                          RemoteLog(@"BLOCK_WRITE", [NSString stringWithFormat:@"Blocked write to: %s", path], true);
-                          return fopen("/dev/null", mode);
-                      }
-                      
-                      // ب- إذا كانت اللعبة تريد القراءة (فحصنا): أعطها ملفاً فارغاً (تزييف)
-                      if (strstr(mode, "r")) {
-                          RemoteLog(@"SPOOF_READ", [NSString stringWithFormat:@"Fake read for: %s", path], true);
-                          return fopen("/dev/null", "r");
-                      }
-                  }
-              }
-              return fopen(path, mode);
-          }
-          DYLD_INTERPOSE(my_fopen, fopen);
-
+          // --- [ نقطة الانطلاق مع تأخير 5 ثواني ] ---
           __attribute__((constructor))
           static void entry() {
-              Method orig = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
-              Method swiz = class_getInstanceMethod([NSBundle class], @selector(my_bundleIdentifier));
-              method_exchangeImplementations(orig, swiz);
-              RemoteLog(@"SYSTEM", @"Ghost V16.7 Online - Full Spoofing Active.", true);
+              // خليه 5 ثواني يتاخر مثل ما طلبت يا بطل
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                  DisableSecurityCollector();
+              });
           }
           EOF
 
-      - name: Compile Full Ghost Module
+      - name: Compile Standalone Dylib
         run: |
           clang++ -dynamiclib -std=c++11 \
           -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 \
-          jni/main.mm -o ShadowImperial.dylib \
+          jni/main.mm -o SecurityBypass.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-Ghost-V16.7
-          path: ShadowImperial.dylib
+          name: Standalone-Bypass-5s
+          path: SecurityBypass.dylib
           
