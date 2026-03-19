@@ -1,4 +1,4 @@
-name: Imperial Shield - V69.0 ANTI-BAN BYPASS
+name: Imperial Store Official - V78.0 NO-CLIENT-ERROR
 
 on:
   push:
@@ -6,82 +6,94 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_shield:
+  build_v78:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create Shield Source
+      - name: Create Official Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
           #import <objc/runtime.h>
 
-          // دالة الرادار للإبلاغ
-          void SendReport(NSString *msg) {
-              NSDictionary *json = @{@"category": @"Shield 🛡️", @"content": msg, @"time": @"LIVE"};
-              NSURL *url = [NSURL URLWithString:@"http://34.204.178.160:5001/ask"];
-              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
-              [req setHTTPMethod:@"POST"];
-              [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-              [req setHTTPBody:[NSJSONSerialization dataWithJSONObject:json options:0 error:nil]];
-              [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
+          #define RADAR_URL @"http://34.204.178.160:5001/ask"
+
+          // دالة إرسال تقارير سريعة جداً (خارج مسار الهوكات)
+          void FastLog(NSString *msg) {
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+                  NSDictionary *json = @{@"category": @"OFFICIAL 🛒", @"content": msg, @"time": @"SYNC"};
+                  NSURL *url = [NSURL URLWithString:RADAR_URL];
+                  NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
+                  [req setHTTPMethod:@"POST"];
+                  [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+                  [req setHTTPBody:[NSJSONSerialization dataWithJSONObject:json options:0 error:nil]];
+                  [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
+              });
           }
 
-          // --- صهر الدرع (The Bypass Hook) ---
+          // --- 1. تزييف بيئة المتجر (App Store Environment) ---
+          void SetupStoreSpoof() {
+              // تزييف الـ Bundle ID
+              Method m_id = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
+              method_setImplementation(m_id, imp_implementationWithBlock(^NSString* (id self) {
+                  return @"com.tencent.ig"; 
+              }));
+
+              // تزييف مسار "إيصال المتجر" - يوهم الحماية أن التطبيق مُحمل رسمياً
+              Method m_receipt = class_getInstanceMethod([NSBundle class], @selector(appStoreReceiptURL));
+              method_setImplementation(m_receipt, imp_implementationWithBlock(^NSURL* (id self) {
+                  return [NSURL fileURLWithPath:@"/var/mobile/Containers/Data/Application/Official/receipt"];
+              }));
+          }
+
+          // --- 2. درع الملفات الصامت (بدون تأخير) ---
           typedef BOOL (*fileExistsAtPath_t)(id, SEL, NSString *);
           fileExistsAtPath_t orig_fileExistsAtPath;
 
           BOOL hk_fileExistsAtPath(id self, SEL _cmd, NSString *path) {
-              // القائمة السوداء للملفات اللي تسبب باند
-              NSArray *blacklist = @[@"Cydia", @"Sileo", @"Shadow", @"Substrate", @"Tweak", @"libdobby", @"Imperial"];
-              
-              for (NSString *item in blacklist) {
-                  if ([path containsString:item]) {
-                      // هنا الخدعة: اللعبة تسأل عن ملف الغش، وإحنا نجاوبها "ماكو هيج ملف"
-                      SendReport([NSString stringWithFormat:@"🤫 الخداع ناجح: أنكرنا وجود %@", path]);
-                      return NO; // الجواب دائماً "لا" للملفات المشبوهة
-                  }
+              // الإنكار الفوري دون مراسلة السيرفر لتقليل التأخير (حل باند العميل)
+              if ([path containsString:@"Cydia"] || [path containsString:@"Sileo"] || [path containsString:@"Shadow"] || [path containsString:@"Imperial"]) {
+                  return NO;
               }
               return orig_fileExistsAtPath(self, _cmd, path);
           }
 
-          void ActivateImperialShield() {
-              // 1. تزييف الهوية (Bundle ID)
-              Method m1 = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
-              method_setImplementation(m1, imp_implementationWithBlock(^NSString* (id self) { return @"com.tencent.ig"; }));
+          void ActivateV78() {
+              SetupStoreSpoof(); // تفعيل محاكاة المتجر
 
-              // 2. تفعيل درع الملفات (File Shield)
-              Method m2 = class_getInstanceMethod([NSFileManager class], @selector(fileExistsAtPath:));
-              orig_fileExistsAtPath = (fileExistsAtPath_t)method_getImplementation(m2);
-              method_setImplementation(m2, imp_implementationWithBlock(^BOOL (id self, NSString *path) {
+              // تفعيل درع الملفات السريع
+              Method m_file = class_getInstanceMethod([NSFileManager class], @selector(fileExistsAtPath:));
+              orig_fileExistsAtPath = (fileExistsAtPath_t)method_getImplementation(m_file);
+              method_setImplementation(m_file, imp_implementationWithBlock(^BOOL (id self, NSString *path) {
                   return hk_fileExistsAtPath(self, @selector(fileExistsAtPath:), path);
               }));
-              
-              SendReport(@"✅ تم تفعيل الدرع الإمبراطوري - أنت الآن مخفي");
+
+              FastLog(@"✅ النسخة الرسمية محاكات بالكامل - تم تخطي فحص العميل");
           }
 
           __attribute__((constructor))
           static void entry() {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  ActivateImperialShield();
+              // تأخير طويل 45 ثانية لضمان عبور فحص الاتصال الأولي للعبة
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 45 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  ActivateV78();
               });
           }
           EOF
 
-      - name: Build Shield Dylib
+      - name: Build V78
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialShield.dylib \
+          -arch arm64 jni/main.mm -o ImperialOfficial.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V69-Shield
-          path: ImperialShield.dylib
+          name: Imperial-V78-Official
+          path: ImperialOfficial.dylib
           
