@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V25.0
+name: Imperial Ultimate AIO - V25.1
 
 on:
   push:
@@ -209,8 +209,8 @@ jobs:
           jni/main.mm -o ImperialUltimate.dylib \
           -framework Foundation -framework UIKit -lobjc
 
-      - name: Upload
-        uses: artifacts/upload-artifact@v4
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
           name: Imperial-Ultimate-AIO
           path: ImperialUltimate.dylib
