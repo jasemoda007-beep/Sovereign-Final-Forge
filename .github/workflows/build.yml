@@ -29,11 +29,14 @@ jobs:
           uintptr_t get_Base() { return (uintptr_t)_dyld_get_image_header(0); }
 
           void Patch(uintptr_t addr, uint32_t data) {
+              mach_port_t task = mach_task_self();
               vm_address_t page_start = trunc_page(addr);
-              vm_size_t page_sz = page_size;
-              if (vm_protect(mach_task_self(), page_start, page_sz, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY) == KERN_SUCCESS) {
+              // تم التصليح: استخدمنا vm_page_size لضمان التوافق مع نظام Mach
+              vm_size_t page_sz = vm_page_size; 
+              
+              if (vm_protect(task, page_start, page_sz, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY) == KERN_SUCCESS) {
                   *(uint32_t *)addr = data;
-                  vm_protect(mach_task_self(), page_start, page_sz, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
+                  vm_protect(task, page_start, page_sz, FALSE, VM_PROT_READ | VM_PROT_EXECUTE);
               }
           }
 
@@ -42,7 +45,7 @@ jobs:
           // ==========================================
           void Layer_Informant_Bypass() {
               uintptr_t target = get_Base() + 0x4C18;
-              Patch(target, 0xD2800000);     // MOV X0, #0
+              Patch(target, 0xD2800000);     // MOV X0, #0 (Return 0)
               Patch(target + 4, 0xD65F03C0); // RET
           }
 
@@ -51,7 +54,7 @@ jobs:
           // ==========================================
           void Layer_Brain_Bypass() {
               uintptr_t target = get_Base() + 0x11B060;
-              // هنا نخليه يرجع 0 حتى يطفي الـ vTable checks
+              // تعطيل فحص الـ vTable وإرجاع قيمة نظيفة للسيرفر
               Patch(target, 0xD2800000); 
               Patch(target + 4, 0xD65F03C0);
           }
@@ -59,18 +62,18 @@ jobs:
           // ==========================================
           // [ الطبقة 3: فلترة البلاغات sub_102B84 ]
           // ==========================================
-          // ملاحظة: الـ Patching هنا أصعب لأنها دالة تسجيل، نكتفي بتعطيلها مؤقتاً
           void Layer_Reporter_Bypass() {
               uintptr_t target = get_Base() + 0x102B84;
-              Patch(target, 0xD65F03C0); // RET (إخراس الدالة فوراً)
+              // إخراس دالة التبليغ المركزية لمنع إرسال أي لوجات مخالفة
+              Patch(target, 0xD65F03C0); // RET فوراً
           }
 
           // ==========================================
           // [ الطبقة 4: مكان الهوكات الجديدة (إضافة مسعود) ]
           // ==========================================
           void Layer_Custom_New_Hooks() {
-              // ضلعي مسعود.. هنا تقدر تضيف أي أوفست جديد تكتشفه بـ IDA
-              // مثال: uintptr_t myTarget = get_Base() + 0xXXXXXX;
+              // ضلعي مسعود.. هنا المساحة مفتوحة إلك لأي أوفست جديد
+              // مخصص لإضافاتك المستقبلية
           }
 
           // ==========================================
@@ -78,6 +81,7 @@ jobs:
           // ==========================================
           __attribute__((constructor))
           static void Falcon_Ghost_Init() {
+              // تأخير 5 ثواني لضمان استقرار اللعبة وتخطي الفحص الأولي
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   
                   Layer_Informant_Bypass();
@@ -102,5 +106,6 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Falcon-Shadow-V1
+          name: Falcon-Shadow-V1.1
           path: FalconShadow.dylib
+          
