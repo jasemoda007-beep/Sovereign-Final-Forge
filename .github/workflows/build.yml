@@ -13,12 +13,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Dobby Framework
+      - name: Setup Dobby Framework (Fixed)
         run: |
-          # تحميل مكتبة Dobby لعمل الهوكات الاحترافية
-          curl -L https://github.com/jmpews/Dobby/releases/download/v1.1.2/dobby_arm64-apple-darwin.tar.gz | tar -xz
-          mv dobby_arm64-apple-darwin/libdobby.a .
-          mv dobby_arm64-apple-darwin/dobby.h .
+          # تحميل نسخة Dobby المستقرة والجديدة للـ iOS
+          curl -L https://github.com/jmpews/Dobby/releases/download/v1.8.1/dobby_static_framework_iphoneos.tar.gz -o dobby.tar.gz
+          tar -xzf dobby.tar.gz
+          
+          # ترتيب الملفات حتى يفهمها الكومبايلر
+          # نسخة 1.8.1 تأتي كـ Framework، راح نسحب منها الملفات الضرورية
+          cp -r Dobby.framework/Headers/* .
+          cp Dobby.framework/Dobby libdobby.a
+          
+          echo "✅ Dobby framework is ready."
 
       - name: Smelt Imperial C++ Code
         run: |
@@ -60,7 +66,6 @@ jobs:
           void my_exit(int code) {
               RemoteLog(@"[⚠️] SHUTDOWN DETECTED! Shredding evidence before exit...");
               WipeSecurityData();
-              // نعطي السيرفر وقت يستلم التقرير قبل ما تموت اللعبة
               this_thread::sleep_for(chrono::seconds(2));
               orig_exit(code);
           }
@@ -75,11 +80,11 @@ jobs:
           }
 
           void InitializeImperial() {
-              // 1. هوك الخروج (للمراقبة بعد الإغلاق)
+              // 1. هوك الخروج
               void *exit_ptr = dlsym(RTLD_DEFAULT, "exit");
               DobbyHook(exit_ptr, (void *)my_exit, (void **)&orig_exit);
 
-              // 2. هوك مراقبة الملفات (الرادار)
+              // 2. هوك مراقبة الملفات
               void *fopen_ptr = dlsym(RTLD_DEFAULT, "fopen");
               DobbyHook(fopen_ptr, (void *)my_fopen, (void **)&orig_fopen);
 
@@ -101,6 +106,7 @@ jobs:
 
       - name: Compile Imperial Stealth Module
         run: |
+          # نستخدم libdobby.a اللي رتبناه بالخطوة الأولى
           clang++ -dynamiclib -std=c++11 \
           -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
@@ -114,4 +120,3 @@ jobs:
         with:
           name: Imperial-AntiShutdown-V15.1
           path: ShadowImperial.dylib
-          
