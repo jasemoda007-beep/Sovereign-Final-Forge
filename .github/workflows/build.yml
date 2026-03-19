@@ -1,4 +1,4 @@
-name: Imperial Store Official - V78.0 NO-CLIENT-ERROR
+name: Imperial Ultimate Fortress - V80.0 FULL ARMOR
 
 on:
   push:
@@ -6,26 +6,28 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_v78:
+  build_v80:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create Official Source
+      - name: Create Fortress Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
+          #import <UIKit/UIKit.h>
           #import <objc/runtime.h>
 
           #define RADAR_URL @"http://34.204.178.160:5001/ask"
 
-          // دالة إرسال تقارير سريعة جداً (خارج مسار الهوكات)
-          void FastLog(NSString *msg) {
+          // 📡 [نظام المراسلة الصامت - تفادي باند العميل بسبب السرعة]
+          // التعليق: يرسل البيانات للخلفية (Async) حتى اللعبة ما تلاحظ أي تأخير بالاستجابة.
+          void SilentLog(NSString *msg) {
               dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-                  NSDictionary *json = @{@"category": @"OFFICIAL 🛒", @"content": msg, @"time": @"SYNC"};
+                  NSDictionary *json = @{@"category": @"FORTRESS 🏰", @"content": msg, @"time": @"SYNC"};
                   NSURL *url = [NSURL URLWithString:RADAR_URL];
                   NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
                   [req setHTTPMethod:@"POST"];
@@ -35,65 +37,109 @@ jobs:
               });
           }
 
-          // --- 1. تزييف بيئة المتجر (App Store Environment) ---
-          void SetupStoreSpoof() {
-              // تزييف الـ Bundle ID
-              Method m_id = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
-              method_setImplementation(m_id, imp_implementationWithBlock(^NSString* (id self) {
-                  return @"com.tencent.ig"; 
-              }));
-
-              // تزييف مسار "إيصال المتجر" - يوهم الحماية أن التطبيق مُحمل رسمياً
-              Method m_receipt = class_getInstanceMethod([NSBundle class], @selector(appStoreReceiptURL));
-              method_setImplementation(m_receipt, imp_implementationWithBlock(^NSURL* (id self) {
-                  return [NSURL fileURLWithPath:@"/var/mobile/Containers/Data/Application/Official/receipt"];
-              }));
-          }
-
-          // --- 2. درع الملفات الصامت (بدون تأخير) ---
+          // 🛡️ [1. درع الملفات الفوري - Zero Latency]
+          // التعليق: يجاوب اللعبة بـ NO فوراً لأي ملف مشبوه بدون ما يروح للسيرفر، هذا يمنع كشف التعديل.
           typedef BOOL (*fileExistsAtPath_t)(id, SEL, NSString *);
           fileExistsAtPath_t orig_fileExistsAtPath;
 
           BOOL hk_fileExistsAtPath(id self, SEL _cmd, NSString *path) {
-              // الإنكار الفوري دون مراسلة السيرفر لتقليل التأخير (حل باند العميل)
-              if ([path containsString:@"Cydia"] || [path containsString:@"Sileo"] || [path containsString:@"Shadow"] || [path containsString:@"Imperial"]) {
+              if ([path containsString:@"Cydia"] || [path containsString:@"Shadow"] || [path containsString:@"Imperial"] || [path containsString:@"libdobby"]) {
                   return NO;
               }
               return orig_fileExistsAtPath(self, _cmd, path);
           }
 
-          void ActivateV78() {
-              SetupStoreSpoof(); // تفعيل محاكاة المتجر
+          // 🍏 [2. تزييف الشهادة والتوقيع - Certificate Spoofing]
+          // التعليق: نوهم اللعبة إن المطور هو شركة آبل نفسها، مو برنامج Sideloadly أو شهادة مجانية.
+          void SetupSignatureSpoof() {
+              Method m_info = class_getInstanceMethod([NSBundle class], @selector(infoDictionary));
+              IMP orig_info = method_getImplementation(m_info);
+              method_setImplementation(m_info, imp_implementationWithBlock(^NSDictionary* (id self) {
+                  NSMutableDictionary *dict = [((NSDictionary*(*)(id, SEL))orig_info)(self, @selector(infoDictionary)) mutableCopy];
+                  [dict setObject:@"Apple iPhone OS Application Signer" forKey:@"SignerIdentity"]; // تزييف هوية الموقّع
+                  [dict setObject:@"com.apple.itunes.store" forKey:@"AppStoreInstaller"]; // تزييف جهة التثبيت
+                  return dict;
+              }));
+          }
 
-              // تفعيل درع الملفات السريع
+          // 🛒 [3. تزييف إيصال الشراء - App Store Receipt]
+          // التعليق: اللعبة تطلب وصل المتجر للتأكد إنك مو مهكرها. نعطيها مسار رسمي وهمي.
+          void SetupReceiptSpoof() {
+              Method m_receipt = class_getInstanceMethod([NSBundle class], @selector(appStoreReceiptURL));
+              method_setImplementation(m_receipt, imp_implementationWithBlock(^NSURL* (id self) {
+                  return [NSURL fileURLWithPath:@"/System/Library/PrivateFrameworks/StoreServices.framework/receipt"];
+              }));
+          }
+
+          // 👤 [4. تزييف الهوية بالكامل - Bundle ID & Device]
+          // التعليق: نغير هويتك من آيفون عادي إلى iPad Pro بنظام 17.4 ونسخة ببجي رسمية.
+          void SetupIdentitySpoof() {
+              method_setImplementation(class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier)), imp_implementationWithBlock(^NSString* (id self) { return @"com.tencent.ig"; }));
+              method_setImplementation(class_getInstanceMethod([UIDevice class], @selector(model)), imp_implementationWithBlock(^NSString* (id self) { return @"iPad"; }));
+              method_setImplementation(class_getInstanceMethod([UIDevice class], @selector(name)), imp_implementationWithBlock(^NSString* (id self) { return @"iPad Pro (12.9-inch)"; }));
+              method_setImplementation(class_getInstanceMethod([UIDevice class], @selector(systemVersion)), imp_implementationWithBlock(^NSString* (id self) { return @"17.4"; }));
+          }
+
+          // 🛑 [5. إضافة جديدة: حماية الحافظة - Anti-Clipboard Snooping]
+          // التعليق: اللعبة مرات تقرأ النصوص المنسوخة بموبايلك تدور على روابط سكربتات. هذا يقفل الحافظة عليها.
+          void SetupClipboardProtection() {
+              Method m_pasteboard = class_getInstanceMethod([UIPasteboard class], @selector(string));
+              method_setImplementation(m_pasteboard, imp_implementationWithBlock(^NSString* (id self) {
+                  return @""; // نرجع لها نص فارغ دائماً
+              }));
+          }
+
+          // ⚙️ [6. إضافة جديدة: تزييف مواصفات الهاردوير - Hardware Spoofing]
+          // التعليق: نوهم الحماية إن جهازك يمتلك رامات ومعالجات عملاقة (مطابقة للآيباد برو) حتى تبعد الشبهة السلوكية.
+          void SetupHardwareSpoof() {
+              Method m_ram = class_getInstanceMethod([NSProcessInfo class], @selector(physicalMemory));
+              method_setImplementation(m_ram, imp_implementationWithBlock(^unsigned long long(id self) {
+                  return 17179869184ULL; // 16 GB RAM وهمية
+              }));
+              
+              Method m_cpu = class_getInstanceMethod([NSProcessInfo class], @selector(activeProcessorCount));
+              method_setImplementation(m_cpu, imp_implementationWithBlock(^NSUInteger(id self) {
+                  return 8; // 8 Cores وهمية
+              }));
+          }
+
+          // 🚀 [تفعيل المنظومة الإمبراطورية]
+          void ActivateV80() {
+              SetupIdentitySpoof();       // تفعيل الهوية
+              SetupSignatureSpoof();      // تفعيل الشهادة
+              SetupReceiptSpoof();        // تفعيل الإيصال
+              SetupClipboardProtection(); // قفل الحافظة
+              SetupHardwareSpoof();       // تزييف الهاردوير
+
+              // تفعيل درع الملفات
               Method m_file = class_getInstanceMethod([NSFileManager class], @selector(fileExistsAtPath:));
               orig_fileExistsAtPath = (fileExistsAtPath_t)method_getImplementation(m_file);
               method_setImplementation(m_file, imp_implementationWithBlock(^BOOL (id self, NSString *path) {
                   return hk_fileExistsAtPath(self, @selector(fileExistsAtPath:), path);
               }));
 
-              FastLog(@"✅ النسخة الرسمية محاكات بالكامل - تم تخطي فحص العميل");
+              SilentLog(@"✅ V80 Active: الدرع الكامل + الشهادة + حماية الحافظة والهاردوير");
           }
 
           __attribute__((constructor))
           static void entry() {
-              // تأخير طويل 45 ثانية لضمان عبور فحص الاتصال الأولي للعبة
+              // تأخير 45 ثانية لتخطي فحوصات الشبكة الأولية بسلام
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 45 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  ActivateV78();
+                  ActivateV80();
               });
           }
           EOF
 
-      - name: Build V78
+      - name: Build V80 Fortress
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialOfficial.dylib \
-          -framework Foundation -lobjc
+          -arch arm64 jni/main.mm -o ImperialV80.dylib \
+          -framework Foundation -framework UIKit -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V78-Official
-          path: ImperialOfficial.dylib
+          name: Imperial-V80-UltimateFortress
+          path: ImperialV80.dylib
           
