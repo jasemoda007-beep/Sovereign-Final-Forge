@@ -1,4 +1,4 @@
-name: Imperial Deep Tracer - V81.0 IDA PRO LINK
+name: Imperial Deep Tracer - V82.0 DELAYED HOOKS
 
 on:
   push:
@@ -20,11 +20,14 @@ jobs:
           #import <Foundation/Foundation.h>
           #include <dlfcn.h>
           #include <sys/stat.h>
+          #include <unistd.h>
           #include <pthread.h>
 
           #define RADAR_URL @"http://34.204.178.160:5001/ask"
 
-          // طابور إرسال صامت وآمن حتى ما يسبب كراش أثناء الهوكات العميقة
+          // 🛑 متغير التحكم: الرادار مطفي بالبداية لمنع الكراش
+          static BOOL isTracerActive = NO;
+
           void IDA_Log(NSString *category, NSString *msg) {
               dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
                   NSDictionary *json = @{@"category": category, @"content": msg, @"time": @"TRACE"};
@@ -44,10 +47,9 @@ jobs:
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
           // 1. مراقبة dlsym (أهم دالة للـ IDA Pro)
-          // هذي الدالة راح تكشف لك الحماية شنو المكاتب والدوال اللي كاعدة تحملها بالخفاء
           void* hk_dlsym(void* handle, const char* symbol) {
-              if (symbol) {
-                  // فلترة حتى ما نغرق الرادار بآلاف الطلبات العادية
+              // إذا ما مرت 30 ثانية، لا تسوي أي شي، بس رجع الدالة الأصلية
+              if (isTracerActive && symbol) {
                   if (strstr(symbol, "ptrace") || strstr(symbol, "sysctl") || strstr(symbol, "stat") || strstr(symbol, "access") || strstr(symbol, "fork")) {
                       IDA_Log(@"dlsym 🕵️", [NSString stringWithFormat:@"الحماية تستدعي: %s", symbol]);
                   }
@@ -58,8 +60,10 @@ jobs:
 
           // 2. مراقبة stat (فحص الملفات بـ C)
           int hk_stat(const char *path, struct stat *buf) {
-              if (path && (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "Substrate") || strstr(path, "dylib"))) {
-                  IDA_Log(@"stat 📂", [NSString stringWithFormat:@"فحص عميق للمسار: %s", path]);
+              if (isTracerActive && path) {
+                  if (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "Substrate") || strstr(path, "dylib")) {
+                      IDA_Log(@"stat 📂", [NSString stringWithFormat:@"فحص عميق للمسار: %s", path]);
+                  }
               }
               return stat(path, buf);
           }
@@ -67,8 +71,10 @@ jobs:
 
           // 3. مراقبة access (صلاحيات الملفات)
           int hk_access(const char *path, int mode) {
-              if (path && (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "Substrate"))) {
-                  IDA_Log(@"access 🔒", [NSString stringWithFormat:@"فحص صلاحيات: %s", path]);
+              if (isTracerActive && path) {
+                  if (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "Substrate")) {
+                      IDA_Log(@"access 🔒", [NSString stringWithFormat:@"فحص صلاحيات: %s", path]);
+                  }
               }
               return access(path, mode);
           }
@@ -76,20 +82,24 @@ jobs:
 
           __attribute__((constructor))
           static void entry() {
-              IDA_Log(@"SYSTEM 🚀", @"V81 Deep Tracer Active - جاهز للربط مع IDA Pro");
+              // ⏱️ التأخير الإمبراطوري: 30 ثانية لضمان استقرار اللعبة
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  isTracerActive = YES; // تفعيل الرادار بعد الاستقرار
+                  IDA_Log(@"SYSTEM 🚀", @"V82 Deep Tracer Active - عبرنا الـ 30 ثانية وجاهزين للصيد");
+              });
           }
           EOF
 
-      - name: Build V81 Tracer
+      - name: Build V82 Tracer
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialV81.dylib \
+          -arch arm64 jni/main.mm -o ImperialV82.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V81-IDATracer
-          path: ImperialV81.dylib
+          name: Imperial-V82-DelayedTracer
+          path: ImperialV82.dylib
           
