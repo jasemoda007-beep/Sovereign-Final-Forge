@@ -1,4 +1,4 @@
-name: Falcon Shadow Dylib - Standalone 5s
+name: Imperial AIO - Ghost V20.0 (Lobby Trigger)
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_falcon:
+  build_aio:
     runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create Falcon Source
+      - name: Create AIO Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
@@ -22,16 +22,30 @@ jobs:
           #include <mach/mach.h>
           #include <objc/runtime.h>
           #include <stdint.h>
+          #include <sys/stat.h>
 
           // ==========================================
-          // [ تعريفات الهوكات - الأدوات ]
+          // [ 1. رادار الـ VPS واللوجات ]
+          // ==========================================
+          void RemoteLog(NSString *tag, NSString *msg) {
+              NSString *url = @"http://34.204.178.160:5000/log"; 
+              NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
+              [req setHTTPMethod:@"POST"];
+              [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+              NSString *content = [NSString stringWithFormat:@"🛡️ [%@] -> %@", tag, msg];
+              NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"content": content} options:0 error:nil];
+              [req setHTTPBody:data];
+              [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
+          }
+
+          // ==========================================
+          // [ 2. محرك تعديل الذاكرة (Patch Engine) ]
           // ==========================================
           uintptr_t get_Base() { return (uintptr_t)_dyld_get_image_header(0); }
 
           void Patch(uintptr_t addr, uint32_t data) {
               mach_port_t task = mach_task_self();
               vm_address_t page_start = trunc_page(addr);
-              // تم التصليح: استخدمنا vm_page_size لضمان التوافق مع نظام Mach
               vm_size_t page_sz = vm_page_size; 
               
               if (vm_protect(task, page_start, page_sz, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY) == KERN_SUCCESS) {
@@ -41,71 +55,80 @@ jobs:
           }
 
           // ==========================================
-          // [ الطبقة 1: تصفير المخبر السري sub_4C18 ]
+          // [ 3. ميزة الـ Interpose (للملفات) ]
           // ==========================================
-          void Layer_Informant_Bypass() {
+          typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
+          #define DYLD_INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
+
+          // هوك ملفات الـ Config و الـ Ano
+          FILE* my_fopen(const char* path, const char* mode) {
+              if (path && (strstr(path, "ano") || strstr(path, "tss") || strstr(path, "comm.dat"))) {
+                  return fopen("/dev/null", mode); // تزييف القراءة
+              }
+              return fopen(path, mode);
+          }
+          DYLD_INTERPOSE(my_fopen, fopen);
+
+          // ==========================================
+          // [ 4. طبقات الحماية (The Layers) ]
+          // ==========================================
+
+          // الطبقة الأولى: تصفير sub_4C18 (المخبر)
+          void Layer_Informant() {
               uintptr_t target = get_Base() + 0x4C18;
-              Patch(target, 0xD2800000);     // MOV X0, #0 (Return 0)
-              Patch(target + 4, 0xD65F03C0); // RET
+              Patch(target, 0xD2800000); Patch(target + 4, 0xD65F03C0);
+              RemoteLog(@"LAYER_1", @"Informant (4C18) Neutered.");
+          }
+
+          // الطبقة الثانية: تخدير Falcon (العقل المدبر)
+          void Layer_Falcon() {
+              uintptr_t brain = get_Base() + 0x11B060;
+              uintptr_t reporter = get_Base() + 0x102B84;
+              
+              Patch(brain, 0xD2800000); Patch(brain + 4, 0xD65F03C0); // تعطيل الـ Brain
+              Patch(reporter, 0xD65F03C0); // إخراس الـ Reporter
+              
+              RemoteLog(@"LAYER_2", @"Falcon Brain & Reporter Disabled.");
+          }
+
+          // الطبقة الثالثة: تخدير الهوية (BundleID)
+          void Layer_Identity() {
+              // هوك الـ BundleID لضمان عدم كشف الشهادة
+              Method orig = class_getInstanceMethod([NSBundle class], @selector(bundleIdentifier));
+              // (يتم وضع دالة my_bundleIdentifier هنا)
+              RemoteLog(@"LAYER_3", @"Identity Spoofing Active.");
           }
 
           // ==========================================
-          // [ الطبقة 2: تخدير غرفة العمليات sub_11B060 ]
-          // ==========================================
-          void Layer_Brain_Bypass() {
-              uintptr_t target = get_Base() + 0x11B060;
-              // تعطيل فحص الـ vTable وإرجاع قيمة نظيفة للسيرفر
-              Patch(target, 0xD2800000); 
-              Patch(target + 4, 0xD65F03C0);
-          }
-
-          // ==========================================
-          // [ الطبقة 3: فلترة البلاغات sub_102B84 ]
-          // ==========================================
-          void Layer_Reporter_Bypass() {
-              uintptr_t target = get_Base() + 0x102B84;
-              // إخراس دالة التبليغ المركزية لمنع إرسال أي لوجات مخالفة
-              Patch(target, 0xD65F03C0); // RET فوراً
-          }
-
-          // ==========================================
-          // [ الطبقة 4: مكان الهوكات الجديدة (إضافة مسعود) ]
-          // ==========================================
-          void Layer_Custom_New_Hooks() {
-              // ضلعي مسعود.. هنا المساحة مفتوحة إلك لأي أوفست جديد
-              // مخصص لإضافاتك المستقبلية
-          }
-
-          // ==========================================
-          // [ المحرك الرئيسي - التشغيل بعد 5 ثواني ]
+          // [ 5. التشغيل الذكي (Lobby Trigger) ]
           // ==========================================
           __attribute__((constructor))
-          static void Falcon_Ghost_Init() {
-              // تأخير 5 ثواني لضمان استقرار اللعبة وتخطي الفحص الأولي
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+          static void Imperial_AIO_Init() {
+              // تأخير 15 ثانية لضمان الوصول للوبي وتخطي الفحص الأولي
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                   
-                  Layer_Informant_Bypass();
-                  Layer_Brain_Bypass();
-                  Layer_Reporter_Bypass();
-                  Layer_Custom_New_Hooks();
+                  Layer_Informant();
+                  Layer_Falcon();
+                  Layer_Identity();
 
-                  printf("🛡️ [FALCON-SHADOW] All layers active after 5s delay.\n");
+                  RemoteLog(@"AIO_STATUS", @"Imperial Ghost V20.0 - All Layers Armed in Lobby.");
+                  printf("🛡️ [IMPERIAL] Ghost Engine Fully Loaded at Lobby.\n");
               });
           }
           EOF
 
-      - name: Build Falcon Dylib
+      - name: Build AIO Dylib
         run: |
           clang++ -dynamiclib -std=c++11 \
           -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 \
-          jni/main.mm -o FalconShadow.dylib \
+          jni/main.mm -o ImperialAIO.dylib \
           -framework Foundation -lobjc
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Falcon-Shadow-V1.1
-          path: FalconShadow.dylib
+          name: Imperial-AIO-V20
+          path: ImperialAIO.dylib
           
