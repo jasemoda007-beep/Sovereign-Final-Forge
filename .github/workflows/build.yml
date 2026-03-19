@@ -1,116 +1,100 @@
-name: FALCON BYPASS - ADVANCED STANDALONE
+name: Dragon Shadow Imperial Smelter V8.0
 
 on:
   push:
-    branches: [ "main", "master" ]
-  workflow_dispatch: 
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  build_bypass_pro:
-    name: Build Advanced ANOGS Bypass
+  build_shadow_engine:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-      - name: Install ldid
-        run: brew install ldid
-
-      - name: Generate bypass.mm
+      - name: Smelt Imperial C++ Code
         run: |
-          cat << 'EOF_MM' > bypass.mm
-          #import <Foundation/Foundation.h>
-          #include <mach-o/dyld.h>
+          mkdir -p jni
+          cat <<'EOF' > jni/main.cpp
           #include <iostream>
           #include <vector>
+          #include <thread>
+          #include <chrono>
+          #include <mach-o/dyld.h>
+          #include <sys/mman.h>
 
           using namespace std;
 
-          // 1. جلب العنوان الحقيقي لتخطي حماية ASLR
-          uintptr_t getModuleBase(const char* moduleName) {
-              for (uint32_t i = 0; i < _dyld_image_count(); i++) {
-                  const char* imageName = _dyld_get_image_name(i);
-                  if (strstr(imageName, moduleName)) {
-                      return (uintptr_t)_dyld_get_image_header(i);
+          // ==========================================================
+          // 1. [محرك الذاكرة الشبح] - كسر الحماية وإعادتها فوراً
+          // ==========================================================
+          namespace ImperialStealth {
+              uintptr_t GetBase() {
+                  return (uintptr_t)_dyld_get_image_header(0);
+              }
+
+              void SilentPatch(uintptr_t offset, uint32_t instruction) {
+                  uintptr_t target = GetBase() + offset;
+                  uintptr_t page = target & ~(PAGE_SIZE - 1);
+
+                  // فتح الذاكرة (RWX)
+                  if (mprotect((void*)page, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+                      *(uint32_t*)target = instruction;
+                      // إغلاق الذاكرة فوراً (RX) لإخفاء الأثر عن الفحص الدوري
+                      mprotect((void*)page, PAGE_SIZE, PROT_READ | PROT_EXEC);
+                      printf("[✔] Shadow Patch Applied: 0x%lx\n", offset);
                   }
               }
-              // العودة للعنوان الأساسي للتطبيق إذا لم يتم تحديد المكتبة
-              return (uintptr_t)_dyld_get_image_header(0); 
           }
 
-          uintptr_t getRealOffsetAnogs(uintptr_t offset) {
-              static uintptr_t baseAddr = 0;
-              if (baseAddr == 0) {
-                  // جلب عنوان ملف الأنتيشيت (Anogs) برمجياً بدل اللعبة الأساسية
-                  baseAddr = getModuleBase("anogs"); 
-                  if(baseAddr == 0) baseAddr = 0x100000000; // حماية احتياطية
-              }
-              return baseAddr + offset;
+          // ==========================================================
+          // 2. [منظومة تخدير الحماية] - إخراس GTrace ودوائر التبليغ
+          // ==========================================================
+          void InitializeDragonEngine() {
+              // RET instruction (ARM64): 0xD65F03C0
+              uint32_t kill_code = 0xD65F03C0;
+
+              // [أ] تخدير الدالة المعقدة التي أرسلتها (sub_10018F04C)
+              // وظيفتها: فك الوايت لست وتتبع الأهداف - الحالة: إخراس تام
+              ImperialStealth::SilentPatch(0x18F04C, kill_code);
+
+              // [ب] تخدير محرك التقارير (sub_1000E87A4)
+              // وظيفتها: إرسال اللوغات الجنائية للسيرفر - الحالة: قطع الاتصال
+              ImperialStealth::SilentPatch(0xE87A4, kill_code);
+
+              // [ج] تخدير جالب المود (sub_100146C78)
+              // نجبره يرجع 0 (تعطيل) بدل ما يقرأ TargetMode من السيرفر
+              // MOV X0, #0: 0xD2800000 | RET: 0xD65F03C0
+              // سنستخدم RET فقط كبداية سريعة وآمنة
+              ImperialStealth::SilentPatch(0x146C78, kill_code);
+
+              printf("[🐲] تم صهر الأكواد.. النظام يظهر للسيرفر كـ (رسمي/Official)\n");
           }
 
-          static const int allowlist[] = {
-              100,104,128,149,153,178,182,205,278,294,371,406,465,538
-          };
-
-          static const int blacklist[] = {
-              108,109,562,635,656,729,755,865,883,896,938,940,956,969,
-              2818,3553,4083,114,
-              3,4,6,7,8,9,10,11,12,13,14,15,16,17,
-              22,41,57,63,80,21,
-              68, 71, 92, 115, 125, 141, 163, 165, 187, 197, 210, 227, 230, 233, 238, 243, 246, 250, 254, 266, 268, 271, 283, 297, 305, 306, 315, 316, 319, 326, 330, 331
-          };
-
-          void* (*old_AnogsReport)(void* context, int packetID, unsigned char* a1, int a2);
-
-          void* my_AnogsReport(void* context, int packetID, unsigned char* a1, int a2) {
-              // 1. فلترة الباكيتات الخطرة
-              for (int i = 0; i < sizeof(blacklist)/sizeof(blacklist[0]); i++) {
-                  if (packetID == blacklist[i]) {
-                      return nullptr; // حظر الباكيت بصمت
-                  }
-              }
-
-              // 2. حماية من الكراش (إذا كان الباكيت فارغاً)
-              if (!a1 || a2 <= 0) {
-                  return old_AnogsReport(context, packetID, a1, a2);
-              }
-
-              // 3. حساب البصمة بأمان مع التقاط الأخطاء
-              const unsigned int *crc_table = (const unsigned int *)getRealOffsetAnogs(0x25EA4C);
-              
-              if (crc_table) {
-                  @try {
-                      unsigned int v2 = 0xFFFFFFFF;
-                      for (int i = 0; i < a2; i++) {
-                          v2 = crc_table[(unsigned char)v2 ^ a1[i]] ^ (v2 >> 8);
-                      }
-                      unsigned int real_crc = ~v2; 
-                      
-                      // دمج البصمة المخفية هنا
-                  } @catch (NSException *exception) {
-                      // تجاوز الخطأ بصمت لمنع كراش اللعبة
-                  }
-              }
-
-              return old_AnogsReport(context, packetID, a1, a2);
+          // ==========================================================
+          // 3. [محرك الحقن الذاتي] - التشغيل قبل بدء الحماية
+          // ==========================================================
+          __attribute__((constructor))
+          static void dragon_entry() {
+              thread([]() {
+                  // تأخير بسيط لضمان فك ضغط اللعبة في الرام
+                  this_thread::sleep_for(chrono::seconds(4));
+                  InitializeDragonEngine();
+              }).detach();
           }
+          EOF
 
-          __attribute__((constructor)) static void InitializeBypass() {
-              NSLog(@"[FALCON] Advanced Standalone Bypass Injected");
-              NSLog(@"[FALCON] Anti-Crash & ASLR Bypass Active");
-          }
-          EOF_MM
-
-      - name: Build Dylib
+      - name: Compile Imperial Shadow Module
         run: |
-          xcrun -sdk iphoneos clang++ -arch arm64 -shared -std=c++17 -fPIC -framework Foundation bypass.mm -o FalconBypass_Pro.dylib
+          clang++ -dynamiclib -std=c++11 \
+          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
+          -arch arm64 \
+          jni/main.cpp -o ShadowImperial.dylib \
+          -framework Foundation
 
-      - name: Sign Dylib
-        run: ldid -S FalconBypass_Pro.dylib
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Imperial Artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: Falcon_Bypass_Pro_Standalone
-          path: FalconBypass_Pro.dylib
+          name: Imperial-Falcon-Bypass
+          path: ShadowImperial.dylib
