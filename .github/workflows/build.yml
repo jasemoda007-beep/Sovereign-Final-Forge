@@ -1,4 +1,4 @@
-name: Imperial Shadow Shutdown-Guard V15.1
+name: Imperial Shadow Full-Guard V15.3
 
 on:
   push:
@@ -13,20 +13,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Dobby Framework (Fixed)
-        run: |
-          # تحميل نسخة Dobby المستقرة والجديدة للـ iOS
-          curl -L https://github.com/jmpews/Dobby/releases/download/v1.8.1/dobby_static_framework_iphoneos.tar.gz -o dobby.tar.gz
-          tar -xzf dobby.tar.gz
-          
-          # ترتيب الملفات حتى يفهمها الكومبايلر
-          # نسخة 1.8.1 تأتي كـ Framework، راح نسحب منها الملفات الضرورية
-          cp -r Dobby.framework/Headers/* .
-          cp Dobby.framework/Dobby libdobby.a
-          
-          echo "✅ Dobby framework is ready."
-
-      - name: Smelt Imperial C++ Code
+      - name: Smelt Imperial Full Module
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
@@ -37,9 +24,39 @@ jobs:
           #include <dlfcn.h>
           #include <mach-o/dyld.h>
           #include <sys/mman.h>
-          #include "dobby.h"
 
           using namespace std;
+
+          // --- [ ميزة الـ Interpose الأصلية ] ---
+          typedef struct interpose_substitution {
+              const void* replacement;
+              const void* original;
+          } interpose_substitution_t;
+
+          #define DYLD_INTERPOSE(_replacement,_original) \
+             __attribute__((used)) static const interpose_substitution_t _interpose_##_original \
+             __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
+
+          // --- [ محرك الأوفسات والباتش ] ---
+          namespace Imperial {
+              uintptr_t GetBase(const char* n) {
+                  uint32_t c = _dyld_image_count();
+                  for (uint32_t i = 0; i < c; i++) {
+                      if (strstr(_dyld_get_image_name(i), n)) return (uintptr_t)_dyld_get_image_header(i);
+                  }
+                  return (uintptr_t)_dyld_get_image_header(0);
+              }
+
+              void Patch(uintptr_t base, uintptr_t off, uint32_t instr) {
+                  uintptr_t target = base + off;
+                  long sz = getpagesize();
+                  uintptr_t pg = target & ~(sz - 1);
+                  if (mprotect((void*)pg, sz, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+                      *(uint32_t*)target = instr;
+                      mprotect((void*)pg, sz, PROT_READ | PROT_EXEC);
+                  }
+              }
+          }
 
           // --- [ إعدادات السيرفر ] ---
           void RemoteLog(NSString *msg) {
@@ -61,34 +78,36 @@ jobs:
               }
           }
 
-          // --- [ هوك دالة الخروج ] ---
-          void (*orig_exit)(int);
-          void my_exit(int code) {
-              RemoteLog(@"[⚠️] SHUTDOWN DETECTED! Shredding evidence before exit...");
-              WipeSecurityData();
-              this_thread::sleep_for(chrono::seconds(2));
-              orig_exit(code);
-          }
-
-          // --- [ هوك مراقبة الملفات ] ---
-          FILE* (*orig_fopen)(const char*, const char*);
+          // --- [ رادار الملفات ] ---
           FILE* my_fopen(const char* path, const char* mode) {
               if (path && (strstr(path, "/var/mobile/") || strstr(path, "ShadowTrackerExtra"))) {
                   RemoteLog([NSString stringWithFormat:@"[🔍] SCAN: %s", path]);
               }
-              return orig_fopen(path, mode);
+              return fopen(path, mode);
           }
+          DYLD_INTERPOSE(my_fopen, fopen);
 
+          // --- [ هوك الخروج ] ---
+          void my_exit(int code) {
+              RemoteLog(@"[⚠️] SHUTDOWN DETECTED! Shredding evidence...");
+              WipeSecurityData();
+              sleep(2);
+              exit(code);
+          }
+          DYLD_INTERPOSE(my_exit, exit);
+
+          // --- [ تفعيل الأوفسات ] ---
           void InitializeImperial() {
-              // 1. هوك الخروج
-              void *exit_ptr = dlsym(RTLD_DEFAULT, "exit");
-              DobbyHook(exit_ptr, (void *)my_exit, (void **)&orig_exit);
+              uint32_t RET = 0xD65F03C0;
+              uintptr_t sh = Imperial::GetBase("ShadowTrackerExtra");
+              uintptr_t an = Imperial::GetBase("anogs");
 
-              // 2. هوك مراقبة الملفات
-              void *fopen_ptr = dlsym(RTLD_DEFAULT, "fopen");
-              DobbyHook(fopen_ptr, (void *)my_fopen, (void **)&orig_fopen);
-
-              RemoteLog(@"[🐲] Imperial V15.1 FULL MONITORING ACTIVE.");
+              // تطبيق الأوفسات مالتك
+              Imperial::Patch(sh, 0x18F04C, RET); 
+              Imperial::Patch(sh, 0xE87A4, RET);  
+              Imperial::Patch(an, 0x120598, RET); 
+              
+              RemoteLog(@"[🐲] Imperial V15.3 - Offsets Applied & Radar Active.");
           }
 
           __attribute__((constructor))
@@ -104,19 +123,18 @@ jobs:
           }
           EOF
 
-      - name: Compile Imperial Stealth Module
+      - name: Compile Full Module
         run: |
-          # نستخدم libdobby.a اللي رتبناه بالخطوة الأولى
           clang++ -dynamiclib -std=c++11 \
           -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 \
-          -I. -L. -ldobby \
           jni/main.mm -o ShadowImperial.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-AntiShutdown-V15.1
+          name: Imperial-Full-V15.3
           path: ShadowImperial.dylib
+          
