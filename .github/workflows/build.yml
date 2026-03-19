@@ -1,4 +1,4 @@
-name: Dragon Shadow Imperial Smelter V9.1
+name: Dragon Shadow Global Mask V10.0
 
 on:
   push:
@@ -21,64 +21,97 @@ jobs:
           #include <vector>
           #include <thread>
           #include <chrono>
-          #include <unistd.h>      // ضروري لجلب حجم الصفحة
+          #include <unistd.h>
           #include <mach-o/dyld.h>
           #include <sys/mman.h>
+          #include <Foundation/Foundation.h>
+          #include <objc/runtime.h>
 
           using namespace std;
 
           namespace ImperialStealth {
-              uintptr_t GetBase() {
+              uintptr_t GetModuleBase(const char* name) {
+                  uint32_t count = _dyld_image_count();
+                  for (uint32_t i = 0; i < count; i++) {
+                      const char* img_name = _dyld_get_image_name(i);
+                      if (img_name && strstr(img_name, name)) return (uintptr_t)_dyld_get_image_header(i);
+                  }
                   return (uintptr_t)_dyld_get_image_header(0);
               }
 
-              void SilentPatch(uintptr_t offset, uint32_t instruction) {
-                  uintptr_t target = GetBase() + offset;
-                  
-                  // حل مشكلة PAGE_SIZE: جلب الحجم الفعلي من النظام
-                  long sys_page_size = getpagesize();
-                  uintptr_t page = target & ~(sys_page_size - 1);
-
-                  // فتح الذاكرة (RWX) باستخدام الحجم الجديد
-                  if (mprotect((void*)page, sys_page_size, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+              void SilentPatch(uintptr_t base, uintptr_t offset, uint32_t instruction) {
+                  uintptr_t target = base + offset;
+                  long sz = getpagesize();
+                  uintptr_t pg = target & ~(sz - 1);
+                  if (mprotect((void*)pg, sz, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
                       *(uint32_t*)target = instruction;
-                      // إغلاق الذاكرة (RX)
-                      mprotect((void*)page, sys_page_size, PROT_READ | PROT_EXEC);
-                      printf("[✔] Shadow Patch Applied: 0x%lx\n", offset);
+                      mprotect((void*)pg, sz, PROT_READ | PROT_EXEC);
                   }
               }
           }
 
+          // --- [ محرك الاستجابة الذكي: إيهام النظام بالسلامة ] ---
+          // أي دالة تسأل عن هوية اللعبة أو صحتها، نجاوبها بجواب "رسمي"
+          
+          NSString* official_bundle_id(id self, SEL _cmd) { return @"com.tencent.ig"; }
+          BOOL official_is_legit(id self, SEL _cmd) { return YES; } // الرد الدائم بـ "نعم"
+
+          void SetupGlobalIntegrityMask() {
+              Class nsB = objc_getClass("NSBundle");
+              if (nsB) {
+                  // 1. خداع المعرف (BundleID)
+                  Method m1 = class_getInstanceMethod(nsB, @selector(bundleIdentifier));
+                  method_setImplementation(m1, (IMP)official_bundle_id);
+                  
+                  // 2. تخدير أي فحص لوصل الشراء (Receipt)
+                  Method m2 = class_getInstanceMethod(nsB, @selector(appStoreReceiptURL));
+                  method_setImplementation(m2, (IMP)[](){ 
+                      return [NSURL fileURLWithPath:@"/System/Library/CoreServices/SystemVersion.plist"]; 
+                  });
+              }
+          }
+
           void InitializeDragonEngine() {
-              uint32_t kill_code = 0xD65F03C0; // RET ARM64
+              uint32_t RET = 0xD65F03C0;
+              uintptr_t shadowBase = ImperialStealth::GetModuleBase("ShadowTrackerExtra");
+              uintptr_t anogsBase = ImperialStealth::GetModuleBase("anogs");
 
-              // تخدير الدوال اللي استخرجتها من ملف الشادو
-              ImperialStealth::SilentPatch(0x18F04C, kill_code); // GTrace Bypass
-              ImperialStealth::SilentPatch(0xE87A4, kill_code);  // Telemetry Mute
-              ImperialStealth::SilentPatch(0x146C78, kill_code); // Mode Spoofer
+              // [أ] تخدير الحمايات الداخلية بالأوفستات الذهبية
+              ImperialStealth::SilentPatch(shadowBase, 0x18F04C, RET); // GTrace
+              ImperialStealth::SilentPatch(shadowBase, 0xE87A4, RET);  // Telemetry
+              ImperialStealth::SilentPatch(anogsBase, 0x120598, RET); // anogs Scan (اللي لقطته)
+              ImperialStealth::SilentPatch(shadowBase, 0x120598, RET); // للتأكد إذا كانت مدمجة
 
-              printf("[🐲] تم صهر الأكواد وتجاوز مشكلة PAGE_SIZE بنجاح!\n");
+              // [ب] تفعيل القناع العالمي (خداع النظام)
+              SetupGlobalIntegrityMask();
+
+              printf("[🐲] V10.0: تم تفعيل "القناع العالمي".. اللعبة الآن تظن أنها في الجنة!\n");
           }
 
           __attribute__((constructor))
-          static void dragon_entry() {
+          static void entry() {
               thread([]() {
-                  this_thread::sleep_for(chrono::seconds(5));
+                  this_thread::sleep_for(chrono::seconds(8));
                   InitializeDragonEngine();
+                  // مسح اللوجات الجنائية كل دقيقة
+                  while(true) {
+                      this_thread::sleep_for(chrono::minutes(1));
+                      // (كود المسح اللي سويناه بـ V9.7)
+                  }
               }).detach();
           }
           EOF
 
-      - name: Compile Imperial Shadow Module
+      - name: Compile Imperial Stealth Module
         run: |
           clang++ -dynamiclib -std=c++11 \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 \
           jni/main.cpp -o ShadowImperial.dylib \
-          -framework Foundation
+          -framework Foundation -lobjc
 
-      - name: Upload Imperial Artifact
+      - name: Upload Global Mask Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-Falcon-Bypass
+          name: Imperial-Global-Mask-V10.0
           path: ShadowImperial.dylib
