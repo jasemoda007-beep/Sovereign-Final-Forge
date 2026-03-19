@@ -1,4 +1,4 @@
-name: Imperial Red Alert - V85.0 BLACK BOX
+name: Imperial Red Alert - V85.1 FIXED BUILD
 
 on:
   push:
@@ -63,7 +63,7 @@ jobs:
           const char* hk__dyld_get_image_name(uint32_t image_index) {
               const char* name = _dyld_get_image_name(image_index);
               if (isTracerActive && name) {
-                  if (strstr(name, "Imperial") || strstr(name, "Shadow") || strstr(name, "Substrate")) {
+                  if (strstr(name, "Imperial") || strstr(name, "Shadow") || strstr(name, "Substrate") || strstr(name, "dylib")) {
                       // 🟥 الحماية لقطت الدايلب مالتنا بالذاكرة
                       IDA_Log(@"Memory ⚠️", [NSString stringWithFormat:@"[DANGER] الحماية تقرأ مسار محقون: %s", name], @"red");
                   }
@@ -92,15 +92,22 @@ jobs:
           static void entry() {
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                   isTracerActive = YES;
-                  IDA_Log(@"SYSTEM 🚀", @"V85 Red Alert Active - بدأ التسجيل للصندوق الأسود", @"#00ff00");
+                  IDA_Log(@"SYSTEM 🚀", @"V85.1 Red Alert Active - بدأ التسجيل للصندوق الأسود", @"#00ff00");
               });
           }
           EOF
 
-            - name: Build V85 Tracer
+      - name: Build V85 Tracer
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -target arm64-apple-ios14.0 \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 jni/main.mm -o ImperialV85.dylib \
           -framework Foundation -lobjc
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Imperial-V85-RedAlert
+          path: ImperialV85.dylib
+          
