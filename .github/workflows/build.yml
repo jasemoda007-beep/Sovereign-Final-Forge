@@ -1,4 +1,4 @@
-name: Dragon Shadow Imperial Smelter V8.1
+name: Dragon Shadow Imperial Smelter V9.1
 
 on:
   push:
@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4 # تحديث إلى v4
+        uses: actions/checkout@v4
 
       - name: Smelt Imperial C++ Code
         run: |
@@ -21,6 +21,7 @@ jobs:
           #include <vector>
           #include <thread>
           #include <chrono>
+          #include <unistd.h>      // ضروري لجلب حجم الصفحة
           #include <mach-o/dyld.h>
           #include <sys/mman.h>
 
@@ -33,11 +34,16 @@ jobs:
 
               void SilentPatch(uintptr_t offset, uint32_t instruction) {
                   uintptr_t target = GetBase() + offset;
-                  uintptr_t page = target & ~(PAGE_SIZE - 1);
+                  
+                  // حل مشكلة PAGE_SIZE: جلب الحجم الفعلي من النظام
+                  long sys_page_size = getpagesize();
+                  uintptr_t page = target & ~(sys_page_size - 1);
 
-                  if (mprotect((void*)page, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+                  // فتح الذاكرة (RWX) باستخدام الحجم الجديد
+                  if (mprotect((void*)page, sys_page_size, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
                       *(uint32_t*)target = instruction;
-                      mprotect((void*)page, PAGE_SIZE, PROT_READ | PROT_EXEC);
+                      // إغلاق الذاكرة (RX)
+                      mprotect((void*)page, sys_page_size, PROT_READ | PROT_EXEC);
                       printf("[✔] Shadow Patch Applied: 0x%lx\n", offset);
                   }
               }
@@ -46,22 +52,18 @@ jobs:
           void InitializeDragonEngine() {
               uint32_t kill_code = 0xD65F03C0; // RET ARM64
 
-              // تخدير الدالة المعقدة sub_10018F04C
-              ImperialStealth::SilentPatch(0x18F04C, kill_code);
+              // تخدير الدوال اللي استخرجتها من ملف الشادو
+              ImperialStealth::SilentPatch(0x18F04C, kill_code); // GTrace Bypass
+              ImperialStealth::SilentPatch(0xE87A4, kill_code);  // Telemetry Mute
+              ImperialStealth::SilentPatch(0x146C78, kill_code); // Mode Spoofer
 
-              // تخدير محرك التقارير sub_1000E87A4
-              ImperialStealth::SilentPatch(0xE87A4, kill_code);
-
-              // تخدير جالب المود sub_100146C78
-              ImperialStealth::SilentPatch(0x146C78, kill_code);
-
-              printf("[🐲] تم صهر الأكواد بنجاح.. النظام محصن الآن!\n");
+              printf("[🐲] تم صهر الأكواد وتجاوز مشكلة PAGE_SIZE بنجاح!\n");
           }
 
           __attribute__((constructor))
           static void dragon_entry() {
               thread([]() {
-                  this_thread::sleep_for(chrono::seconds(4));
+                  this_thread::sleep_for(chrono::seconds(5));
                   InitializeDragonEngine();
               }).detach();
           }
@@ -76,8 +78,7 @@ jobs:
           -framework Foundation
 
       - name: Upload Imperial Artifact
-        uses: actions/upload-artifact@v4 # تحديث إلى v4 وهو المطلوب لحل المشكلة
+        uses: actions/upload-artifact@v4
         with:
           name: Imperial-Falcon-Bypass
           path: ShadowImperial.dylib
-          
