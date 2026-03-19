@@ -1,4 +1,4 @@
-name: Imperial Deep Tracer - V82.0 DELAYED HOOKS
+name: Imperial Stealth Sensor - V84.0 DEEP TRACE
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_tracer:
+  build_v84:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create Deep Tracer Source
+      - name: Create Stealth Sensor Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
@@ -21,15 +21,15 @@ jobs:
           #include <dlfcn.h>
           #include <sys/stat.h>
           #include <unistd.h>
-          #include <pthread.h>
+          #include <mach-o/dyld.h> // مكتبة قراءة الذاكرة العميقة
+          #include <fcntl.h>
+          #include <stdarg.h>
 
           #define RADAR_URL @"http://34.204.178.160:5001/ask"
-
-          // 🛑 متغير التحكم: الرادار مطفي بالبداية لمنع الكراش
-          static BOOL isTracerActive = NO;
+          static BOOL isTracerActive = NO; // صمام الأمان لمنع الكراش
 
           void IDA_Log(NSString *category, NSString *msg) {
-              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
                   NSDictionary *json = @{@"category": category, @"content": msg, @"time": @"TRACE"};
                   NSURL *url = [NSURL URLWithString:RADAR_URL];
                   NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
@@ -40,66 +40,87 @@ jobs:
               });
           }
 
-          // ==========================================
-          // [ محرك اللقف العميق - INTERPOSE ]
-          // ==========================================
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
-          // 1. مراقبة dlsym (أهم دالة للـ IDA Pro)
+          // 1. مراقبة الدوال الأساسية
           void* hk_dlsym(void* handle, const char* symbol) {
-              // إذا ما مرت 30 ثانية، لا تسوي أي شي، بس رجع الدالة الأصلية
               if (isTracerActive && symbol) {
-                  if (strstr(symbol, "ptrace") || strstr(symbol, "sysctl") || strstr(symbol, "stat") || strstr(symbol, "access") || strstr(symbol, "fork")) {
-                      IDA_Log(@"dlsym 🕵️", [NSString stringWithFormat:@"الحماية تستدعي: %s", symbol]);
+                  if (strstr(symbol, "ptrace") || strstr(symbol, "sysctl") || strstr(symbol, "fork") || strstr(symbol, "task_for_pid") || strstr(symbol, "syscall")) {
+                      IDA_Log(@"dlsym 🕵️", [NSString stringWithFormat:@"دالة خطرة: %s", symbol]);
                   }
               }
               return dlsym(handle, symbol);
           }
           INTERPOSE(hk_dlsym, dlsym);
 
-          // 2. مراقبة stat (فحص الملفات بـ C)
+          // 2. مراقبة فحص الملفات السريع
           int hk_stat(const char *path, struct stat *buf) {
               if (isTracerActive && path) {
-                  if (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "Substrate") || strstr(path, "dylib")) {
-                      IDA_Log(@"stat 📂", [NSString stringWithFormat:@"فحص عميق للمسار: %s", path]);
+                  if (strstr(path, "Cydia") || strstr(path, "Substrate") || strstr(path, "tersafe") || strstr(path, "tp_") || strstr(path, "dylib")) {
+                      IDA_Log(@"stat 📂", [NSString stringWithFormat:@"فحص حماية لـ: %s", path]);
                   }
               }
               return stat(path, buf);
           }
           INTERPOSE(hk_stat, stat);
 
-          // 3. مراقبة access (صلاحيات الملفات)
-          int hk_access(const char *path, int mode) {
-              if (isTracerActive && path) {
-                  if (strstr(path, "Cydia") || strstr(path, "Shadow") || strstr(path, "Substrate")) {
-                      IDA_Log(@"access 🔒", [NSString stringWithFormat:@"فحص صلاحيات: %s", path]);
+          // 3. 🧠 [المستشعر الذكي] - مراقبة نبش الذاكرة الحية
+          // الحماية تستخدم هذي الدالة عشان تشوف كل المكاتب المحقونة بداخل اللعبة
+          const char* hk__dyld_get_image_name(uint32_t image_index) {
+              const char* name = _dyld_get_image_name(image_index);
+              if (isTracerActive && name) {
+                  // إذا الحماية كاعدة تدور على اسم الدايلب مالتنا أو أدوات الجلبريك
+                  if (strstr(name, "Imperial") || strstr(name, "Shadow") || strstr(name, "dylib") || strstr(name, "MobileSubstrate")) {
+                      IDA_Log(@"Memory Scan 🧠", [NSString stringWithFormat:@"الحماية تنبش بالذاكرة عن: %s", name]);
                   }
               }
-              return access(path, mode);
+              return name;
           }
-          INTERPOSE(hk_access, access);
+          INTERPOSE(hk__dyld_get_image_name, _dyld_get_image_name);
+
+          // 4. 🔓 [المستشعر الذكي] - مراقبة فتح الملفات العميقة
+          int hk_open(const char *path, int oflag, ...) {
+              mode_t mode = 0;
+              if (oflag & O_CREAT) {
+                  va_list ap;
+                  va_start(ap, oflag);
+                  mode = va_arg(ap, int);
+                  va_end(ap);
+              }
+              
+              if (isTracerActive && path) {
+                  if (strstr(path, "tersafe") || strstr(path, "tp_") || strstr(path, "proc") || strstr(path, "kmem")) {
+                      IDA_Log(@"open 🔓", [NSString stringWithFormat:@"محاولة فتح ملف نظام/حماية: %s", path]);
+                  }
+              }
+              
+              if (oflag & O_CREAT) return open(path, oflag, mode);
+              return open(path, oflag);
+          }
+          INTERPOSE(hk_open, open);
+
 
           __attribute__((constructor))
           static void entry() {
-              // ⏱️ التأخير الإمبراطوري: 30 ثانية لضمان استقرار اللعبة
+              // ⏱️ صمام الأمان: تأخير 30 ثانية لتجنب الكراش
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  isTracerActive = YES; // تفعيل الرادار بعد الاستقرار
-                  IDA_Log(@"SYSTEM 🚀", @"V82 Deep Tracer Active - عبرنا الـ 30 ثانية وجاهزين للصيد");
+                  isTracerActive = YES;
+                  IDA_Log(@"SYSTEM 🚀", @"V84 Stealth Sensor Active - مستشعر المخفي يعمل (تأخير 30ث)");
               });
           }
           EOF
 
-      - name: Build V82 Tracer
+      - name: Build V84 Tracer
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialV82.dylib \
+          -arch arm64 jni/main.mm -o ImperialV84.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V82-DelayedTracer
-          path: ImperialV82.dylib
+          name: Imperial-V84-StealthSensor
+          path: ImperialV84.dylib
           
