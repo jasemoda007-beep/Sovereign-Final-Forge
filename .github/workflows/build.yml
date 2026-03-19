@@ -1,4 +1,4 @@
-name: Imperial Ultimate AIO - V25.2
+name: Imperial Ultimate AIO - V25.3
 
 on:
   push:
@@ -19,6 +19,7 @@ jobs:
           cat <<'EOF' > jni/main.mm
           #import <Foundation/Foundation.h>
           #import <UIKit/UIKit.h>
+          #import <CoreGraphics/CoreGraphics.h> // إضافة المكتبة الناقصة
           #include <mach-o/dyld.h>
           #include <mach/mach.h>
           #include <objc/runtime.h>
@@ -163,7 +164,6 @@ jobs:
               self.panel.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.95];
               self.panel.layer.cornerRadius = 12;
               self.panel.layer.borderWidth = 2;
-              // تصليح اللون الذهبي هنا
               self.panel.layer.borderColor = ImperialGold.CGColor;
               self.panel.hidden = YES;
               [self addSubview:self.panel];
@@ -178,7 +178,6 @@ jobs:
               UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
               b.frame = CGRectMake(10, y, 200, 40);
               [b setTitle:t forState:UIControlStateNormal];
-              // استخدام اللون الذهبي للنصوص أيضاً ليعطي منظراً أجمل
               [b setTitleColor:ImperialGold forState:UIControlStateNormal];
               [b addTarget:self action:s forControlEvents:UIControlEventTouchUpInside];
               [self.panel addSubview:b];
@@ -212,7 +211,7 @@ jobs:
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
           -arch arm64 \
           jni/main.mm -o ImperialUltimate.dylib \
-          -framework Foundation -framework UIKit -lobjc
+          -framework Foundation -framework UIKit -framework CoreGraphics -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
