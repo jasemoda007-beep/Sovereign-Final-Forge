@@ -1,4 +1,4 @@
-name: Imperial Red Alert - V85.1 FIXED BUILD
+name: Imperial Ultimate Flood - V91.0 BATCH OFFASETS
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_v85:
+  build_v91:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create Red Alert Source
+      - name: Create Ultimate Flood Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
@@ -23,65 +23,91 @@ jobs:
           #include <unistd.h>
           #include <mach-o/dyld.h>
           #include <fcntl.h>
-          #include <stdarg.h>
+          #include <ctype.h>
 
           #define RADAR_URL @"http://34.204.178.160:5001/ask"
+          
           static BOOL isTracerActive = NO;
+          static NSMutableArray *logBuffer;
+          static NSLock *bufferLock;
 
-          // 🎨 دالة الإرسال مع نظام الألوان
-          void IDA_Log(NSString *category, NSString *msg, NSString *color) {
-              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
-                  NSDictionary *json = @{@"category": category, @"content": msg, @"time": @"TRACE", @"color": color};
-                  NSURL *url = [NSURL URLWithString:RADAR_URL];
-                  NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
-                  [req setHTTPMethod:@"POST"];
-                  [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-                  [req setHTTPBody:[NSJSONSerialization dataWithJSONObject:json options:0 error:nil]];
-                  [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
+          // 🛡️ [نظام الحزم] يجمع الدوال ويرسلها بضربة وحدة لمنع الكراش
+          void Queue_Log(NSString *category, NSString *msg, NSString *color) {
+              if (!isTracerActive || !logBuffer) return;
+              NSDictionary *item = @{@"category": category, @"content": msg, @"time": @"TRACE", @"color": color};
+              [bufferLock lock];
+              [logBuffer addObject:item];
+              [bufferLock unlock];
+          }
+
+          // 🚀 محرك الإرسال بالخلفية (يشتغل كل ثانية يفرغ الحاوية)
+          void StartBatchSender() {
+              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+                  while (YES) {
+                      [NSThread sleepForTimeInterval:1.0]; // تأخير ثانية بين كل إرسال
+                      if (!isTracerActive) continue;
+
+                      [bufferLock lock];
+                      if (logBuffer.count == 0) {
+                          [bufferLock unlock];
+                          continue;
+                      }
+                      NSArray *batch = [logBuffer copy];
+                      [logBuffer removeAllObjects];
+                      [bufferLock unlock];
+
+                      NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:RADAR_URL]];
+                      [req setHTTPMethod:@"POST"];
+                      [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+                      NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@{@"logs": batch} options:0 error:nil];
+                      [req setHTTPBody:jsonData];
+                      [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
+                  }
               });
           }
 
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
-          // 1. مراقبة dlsym (اللون الأحمر للدوال القاتلة)
+          // 1. 🌊 صيد كل دالة تبدأ بحرف (A-Z, a-z, أو _) مع الأوفست
           void* hk_dlsym(void* handle, const char* symbol) {
-              if (isTracerActive && symbol) {
-                  if (strstr(symbol, "ptrace") || strstr(symbol, "task_for_pid") || strstr(symbol, "syscall")) {
-                      // 🟥 دوال خطرة جداً تسبب باند فوري
-                      IDA_Log(@"dlsym ⚠️", [NSString stringWithFormat:@"[DANGER] استدعاء دالة قاتلة: %s", symbol], @"red");
-                  } else if (strstr(symbol, "sysctl") || strstr(symbol, "fork")) {
-                      // 🟨 دوال فحص نظام
-                      IDA_Log(@"dlsym 🔍", [NSString stringWithFormat:@"فحص نظام: %s", symbol], @"orange");
+              void* result = dlsym(handle, symbol); // الحصول على الأوفست الحقيقي
+              
+              if (isTracerActive && symbol && result) {
+                  char first = symbol[0];
+                  // فلتر: اقبل فقط الحروف الإنجليزية أو علامة الـ (_)
+                  if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z') || first == '_') {
+                      
+                      NSString *color = @"#00ffff"; // سماوي للفيضان
+                      NSString *cat = @"Symbol 🌊";
+
+                      // تمييز الدوال الخطرة جداً
+                      if (strstr(symbol, "inline_hook") || strstr(symbol, "ms_") || strstr(symbol, "ptrace")) {
+                          color = @"red"; cat = @"CRITICAL 💀";
+                      } else if (strstr(symbol, "sysctl") || strstr(symbol, "syscall")) {
+                          color = @"orange"; cat = @"HIGH ⚠️";
+                      }
+
+                      // طباعة اسم الدالة + الأوفست
+                      NSString *msg = [NSString stringWithFormat:@"%s | Offset: %p", symbol, result];
+                      Queue_Log(cat, msg, color);
                   }
               }
-              return dlsym(handle, symbol);
+              return result;
           }
           INTERPOSE(hk_dlsym, dlsym);
 
-          // 2. مراقبة مسح الذاكرة (اللون الأحمر لأدوات الجلبريك)
-          const char* hk__dyld_get_image_name(uint32_t image_index) {
-              const char* name = _dyld_get_image_name(image_index);
-              if (isTracerActive && name) {
-                  if (strstr(name, "Imperial") || strstr(name, "Shadow") || strstr(name, "Substrate") || strstr(name, "dylib")) {
-                      // 🟥 الحماية لقطت الدايلب مالتنا بالذاكرة
-                      IDA_Log(@"Memory ⚠️", [NSString stringWithFormat:@"[DANGER] الحماية تقرأ مسار محقون: %s", name], @"red");
-                  }
-              }
-              return name;
-          }
-          INTERPOSE(hk__dyld_get_image_name, _dyld_get_image_name);
-
-          // 3. مراقبة فتح الملفات العميقة
+          // 2. 📁 صيد الملفات
           int hk_open(const char *path, int oflag, ...) {
               mode_t mode = 0;
               if (oflag & O_CREAT) {
                   va_list ap; va_start(ap, oflag); mode = va_arg(ap, int); va_end(ap);
               }
               if (isTracerActive && path) {
-                  if (strstr(path, "tersafe") || strstr(path, "tp_")) {
-                      IDA_Log(@"open 🔓", [NSString stringWithFormat:@"فتح ملف حماية MTP: %s", path], @"#00ff00"); // أخضر
-                  }
+                  NSString *msg = [NSString stringWithFormat:@"%s", path];
+                  NSString *color = @"#ff00ff"; // وردي
+                  if (strstr(path, "tss_ano") || strstr(path, "comm.dat")) color = @"red";
+                  Queue_Log(@"File 📁", msg, color);
               }
               if (oflag & O_CREAT) return open(path, oflag, mode);
               return open(path, oflag);
@@ -90,24 +116,29 @@ jobs:
 
           __attribute__((constructor))
           static void entry() {
+              logBuffer = [[NSMutableArray alloc] init];
+              bufferLock = [[NSLock alloc] init];
+              
+              // ⏱️ صمام الأمان: 30 ثانية لتجنب كراش الإقلاع
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                   isTracerActive = YES;
-                  IDA_Log(@"SYSTEM 🚀", @"V85.1 Red Alert Active - بدأ التسجيل للصندوق الأسود", @"#00ff00");
+                  StartBatchSender(); // تشغيل محرك الإرسال المجمع
+                  Queue_Log(@"SYSTEM 🚀", @"V91 Ultimate Flood Active - بوابات الماتريكس فُتحت بنجاح!", @"#00ff00");
               });
           }
           EOF
 
-      - name: Build V85 Tracer
+      - name: Build V91 Tracer
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -target arm64-apple-ios14.0 \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialV85.dylib \
+          -arch arm64 jni/main.mm -o ImperialV91.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V85-RedAlert
-          path: ImperialV85.dylib
+          name: Imperial-V91-UltimateFlood
+          path: ImperialV91.dylib
           
