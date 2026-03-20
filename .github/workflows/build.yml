@@ -1,8 +1,7 @@
 name: Build Ultimate ShadowBypass
 
 on:
-  workflow_dispatch: # يخليك تشغل البناء بضغطة زر من صفحة Actions
-
+  workflow_dispatch:
 jobs:
   build:
     runs-on: macos-latest
