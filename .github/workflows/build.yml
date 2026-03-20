@@ -1,156 +1,141 @@
-name: Imperial Sniper - V93.0 IDA READY
+name: Build Ultimate ShadowBypass
 
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: # يخليك تشغل البناء بضغطة زر من صفحة Actions
 
 jobs:
-  build_v93:
+  build:
     runs-on: macos-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Setup Theos
+        uses: theos/setup-theos@v2
 
-      - name: Create Sniper Source
+      - name: Create Workspace & Download Fishhook
         run: |
-          mkdir -p jni
-          cat <<'EOF' > jni/main.mm
-          #import <Foundation/Foundation.h>
-          #include <dlfcn.h>
-          #include <sys/stat.h>
-          #include <unistd.h>
-          #include <mach-o/dyld.h>
-          #include <fcntl.h>
-
-          #define RADAR_URL @"http://34.204.178.160:5001/ask"
+          mkdir -p bypass_project
+          cd bypass_project
           
-          static BOOL isTracerActive = NO;
-          static NSMutableArray *logBuffer;
-          static NSLock *bufferLock;
+          echo "Downloading fishhook..."
+          curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.h
+          curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.c
+          
+          echo "Creating Makefile..."
+          cat << 'EOF' > Makefile
+          ARCHS = arm64
+          TARGET = iphone:clang:latest:12.0
+          INSTALL_TARGET_PROCESSES = ShadowTrackerExtra
+          include $(THEOS)/makefiles/common.mk
+          TWEAK_NAME = ShadowBypass
+          ShadowBypass_FILES = Tweak.xm fishhook.c
+          ShadowBypass_CFLAGS = -fobjc-arc
+          include $(THEOS_MAKE_PATH)/tweak.mk
+          EOF
+          
+          echo "Creating Plist filter..."
+          cat << 'EOF' > ShadowBypass.plist
+          { Filter = { Bundles = ( "com.tencent.ig" ); }; }
+          EOF
+          
+          echo "Creating Source Code (Tweak.xm)..."
+          cat << 'EOF' > Tweak.xm
+          #import <Foundation/Foundation.h>
+          #import <mach-o/dyld.h>
+          #import <sys/mman.h>
+          #import <string.h>
+          #import <dlfcn.h>
+          #import "fishhook.h"
 
-          // 🛡️ [نظام الحزم] لمنع الكراش
-          void Queue_Log(NSString *category, NSString *msg, NSString *color) {
-              if (!isTracerActive || !logBuffer) return;
-              NSDictionary *item = @{@"category": category, @"content": msg, @"time": @"TRACE", @"color": color};
-              [bufferLock lock];
-              [logBuffer addObject:item];
-              [bufferLock unlock];
-          }
-
-          // 🚀 محرك الإرسال بالخلفية
-          void StartBatchSender() {
-              dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
-                  while (YES) {
-                      [NSThread sleepForTimeInterval:1.0];
-                      if (!isTracerActive) continue;
-
-                      [bufferLock lock];
-                      if (logBuffer.count == 0) {
-                          [bufferLock unlock];
-                          continue;
-                      }
-                      NSArray *batch = [logBuffer copy];
-                      [logBuffer removeAllObjects];
-                      [bufferLock unlock];
-
-                      NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:RADAR_URL]];
-                      [req setHTTPMethod:@"POST"];
-                      [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-                      NSData *jsonData = [NSJSONSerialization dataWithJSONObject:@{@"logs": batch} options:0 error:nil];
-                      [req setHTTPBody:jsonData];
-                      [[[NSURLSession sharedSession] dataTaskWithRequest:req] resume];
-                  }
-              });
-          }
-
-          typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
-          #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
-
-          // 1. 🎯 صيد الدوال + حساب الأوفست الصافي لـ IDA Pro
-          void* hk_dlsym(void* handle, const char* symbol) {
-              void* result = dlsym(handle, symbol); 
+          // ==========================================
+          // 🛠️ دالة التعديل على الذاكرة الحية (Live Memory Patcher)
+          // ==========================================
+          void apply_memory_patch(uint64_t ida_offset) {
+              // حساب العنوان الحقيقي مع الـ ASLR Slide
+              intptr_t slide = _dyld_get_image_vmaddr_slide(0);
+              uintptr_t target_addr = slide + 0x100000000 + ida_offset;
               
-              // 🧠 السحر هنا: صيد "عنوان العودة" (مكان كود الحماية اللي استدعى هاي الدالة)
-              void* caller_address = __builtin_return_address(0);
+              // فك حماية الذاكرة (منع الكراش)
+              size_t page_size = sysconf(_SC_PAGESIZE);
+              uintptr_t page_start = target_addr & ~(page_size - 1);
+              mprotect((void*)page_start, page_size, PROT_READ | PROT_WRITE | PROT_EXEC);
               
-              if (isTracerActive && symbol && result) {
-                  char first = symbol[0];
-                  if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z') || first == '_') {
-                      
-                      // جلب الـ Base Address للعبة
-                      const struct mach_header *base_header = _dyld_get_image_header(0);
-                      
-                      // 🧮 المعادلة التلقائية: طرح العنوان الأساسي من عنوان المستدعي
-                      intptr_t ida_offset = (intptr_t)caller_address - (intptr_t)base_header;
-
-                      NSString *color = @"#00ffff"; 
-                      NSString *cat = @"Symbol 🌊";
-
-                      // تمييز دوال الفحص العميق اللي اكتشفناها باللوجات السابقة
-                      if (strstr(symbol, "inline_hook") || strstr(symbol, "_dyld_get_image") || strstr(symbol, "ptrace") || strstr(symbol, "vm_region")) {
-                          color = @"red"; cat = @"CRITICAL 💀";
-                      } else if (strstr(symbol, "sysctl") || strstr(symbol, "task_info") || strstr(symbol, "dladdr")) {
-                          color = @"orange"; cat = @"HIGH ⚠️";
-                      }
-
-                      // طباعة اسم الدالة + الأوفست الجاهز لـ IDA
-                      NSString *msg = [NSString stringWithFormat:@"%s | IDA Offset: 0x%lx", symbol, ida_offset];
-                      Queue_Log(cat, msg, color);
-                  }
-              }
-              return result;
+              // كتابة كود الـ NOP (1F 20 03 D5) بالذاكرة
+              unsigned char nop_bytes[] = {0x1F, 0x20, 0x03, 0xD5};
+              memcpy((void*)target_addr, nop_bytes, 4);
           }
-          INTERPOSE(hk_dlsym, dlsym);
 
-          // 2. 📁 صيد الملفات
-          int hk_open(const char *path, int oflag, ...) {
-              mode_t mode = 0;
-              if (oflag & O_CREAT) {
-                  va_list ap; va_start(ap, oflag); mode = va_arg(ap, int); va_end(ap);
+          // ==========================================
+          // 🛡️ دوال الهوك لـ dlsym (خداع الحماية الشامل)
+          // ==========================================
+          static void* (*original_dlsym)(void* handle, const char* symbol);
+          
+          // 1. تزوير الاسم
+          const char* fake_dyld_get_image_name(uint32_t image_index) {
+              const char *real_name = _dyld_get_image_name(image_index); 
+              if (real_name && (strstr(real_name, "ShadowBypass") || strstr(real_name, "MobileSubstrate") || strstr(real_name, "Cydia"))) {
+                  return "/usr/lib/system/libdyld.dylib"; // نعطيه اسم نظامي
               }
-              if (isTracerActive && path) {
-                  NSString *msg = [NSString stringWithFormat:@"%s", path];
-                  NSString *color = @"#ff00ff"; 
-                  if (strstr(path, "tss_ano") || strstr(path, "comm.dat") || strstr(path, "crashSight")) color = @"red";
-                  Queue_Log(@"File 📁", msg, color);
-              }
-              if (oflag & O_CREAT) return open(path, oflag, mode);
-              return open(path, oflag);
+              return real_name;
           }
-          INTERPOSE(hk_open, open);
 
-          __attribute__((constructor))
-          static void entry() {
-              logBuffer = [[NSMutableArray alloc] init];
-              bufferLock = [[NSLock alloc] init];
-              
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  isTracerActive = YES;
-                  StartBatchSender(); 
+          // 2. تزوير البصمة (Header) - الضربة القاضية!
+          const struct mach_header* fake_dyld_get_image_header(uint32_t image_index) {
+              const char *real_name = _dyld_get_image_name(image_index);
+              if (real_name && (strstr(real_name, "ShadowBypass") || strstr(real_name, "MobileSubstrate") || strstr(real_name, "Cydia"))) {
+                  // إذا طلب بصمة الهاك مالتك، نعطيه بصمة الملف رقم 0 (اللي هو اللعبة نفسها)
+                  return _dyld_get_image_header(0); 
+              }
+              return _dyld_get_image_header(image_index);
+          }
+          
+          // 3. تزوير البحث عن فريدا وأخواتها
+          char* fake_strstr(const char *haystack, const char *needle) {
+              if (needle && (strcmp(needle, "frida") == 0 || strcmp(needle, "Cydia") == 0 || strcmp(needle, "Substrate") == 0)) {
+                  return NULL; // نكول للعبة: ماكو هيج شي!
+              }
+              return strstr(haystack, needle);
+          }
+          
+          // 🎯 الهوك المركزي للوسيط dlsym
+          void* hooked_dlsym(void* handle, const char* symbol) {
+              if (symbol) {
+                  if (strcmp(symbol, "_dyld_get_image_name") == 0) return (void*)fake_dyld_get_image_name;
+                  if (strcmp(symbol, "_dyld_get_image_header") == 0) return (void*)fake_dyld_get_image_header;
+                  if (strcmp(symbol, "strstr") == 0) return (void*)fake_strstr;
+              }
+              return original_dlsym(handle, symbol);
+          }
+
+          // ==========================================
+          // ⏳ التشغيل المخفي بعد 20 ثانية (Delayed Execution)
+          // ==========================================
+          __attribute__((constructor)) static void setup_all_bypass() {
+              // الانتظار 20 ثانية بالخفاء حتى اللعبة تكمل فحوصات البداية (فحص النزاهة)
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                   
-                  intptr_t aslr_slide = _dyld_get_image_vmaddr_slide(0);
-                  const struct mach_header *base_address = _dyld_get_image_header(0);
-                  NSString *baseMsg = [NSString stringWithFormat:@"Base Address: %p | ASLR Slide: 0x%lx", base_address, aslr_slide];
+                  // 1. ضرب الأوفستات الحية بالذاكرة (NOP)
+                  apply_memory_patch(0x68F2720); // _strstr
+                  apply_memory_patch(0x68F0BC0); // _dladdr
+                  apply_memory_patch(0x68F2BB8); // _task_info
                   
-                  Queue_Log(@"SYSTEM 🚀", @"V93 Sniper Active - جاهز لحساب أوفستات IDA تلقائياً!", @"#00ff00");
-                  Queue_Log(@"BASE ADDR 🧮", baseMsg, @"#00ff00");
+                  // 2. تشغيل الهوك العكسي
+                  struct rebinding rebindings[] = {
+                      {"dlsym", hooked_dlsym, (void *)&original_dlsym}
+                  };
+                  rebind_symbols(rebindings, 1);
+                  
+                  NSLog(@"[+] Masoud Ultimate Bypass Injected Successfully!");
               });
           }
           EOF
-
-      - name: Build V93 Tracer
+          
+      - name: Compile Dylib
         run: |
-          clang++ -dynamiclib -std=c++11 -x objective-c++ \
-          -target arm64-apple-ios14.0 \
-          -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialV93.dylib \
-          -framework Foundation -lobjc
-
-      - name: Upload Artifact
+          cd bypass_project
+          make FINALPACKAGE=1
+          
+      - name: Upload Dylib Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V93-IdaSniper
-          path: ImperialV93.dylib
+          name: Masoud-Ultimate-Dylib
+          path: bypass_project/.theos/obj/**/*.dylib
           
