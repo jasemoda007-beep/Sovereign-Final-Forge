@@ -1,4 +1,4 @@
-name: Imperial Ultimate Flood - V91.0 BATCH OFFASETS
+name: Imperial Ultimate Matrix - V92.0 FULL BASE
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_v91:
+  build_v92:
     runs-on: macos-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create Ultimate Flood Source
+      - name: Create Ultimate Matrix Source
         run: |
           mkdir -p jni
           cat <<'EOF' > jni/main.mm
@@ -23,7 +23,6 @@ jobs:
           #include <unistd.h>
           #include <mach-o/dyld.h>
           #include <fcntl.h>
-          #include <ctype.h>
 
           #define RADAR_URL @"http://34.204.178.160:5001/ask"
           
@@ -40,11 +39,11 @@ jobs:
               [bufferLock unlock];
           }
 
-          // 🚀 محرك الإرسال بالخلفية (يشتغل كل ثانية يفرغ الحاوية)
+          // 🚀 محرك الإرسال بالخلفية
           void StartBatchSender() {
               dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
                   while (YES) {
-                      [NSThread sleepForTimeInterval:1.0]; // تأخير ثانية بين كل إرسال
+                      [NSThread sleepForTimeInterval:1.0];
                       if (!isTracerActive) continue;
 
                       [bufferLock lock];
@@ -69,26 +68,22 @@ jobs:
           typedef struct interpose_substitution { const void* replacement; const void* original; } interpose_substitution_t;
           #define INTERPOSE(_replacement,_original) __attribute__((used)) static const interpose_substitution_t _interpose_##_original __attribute__ ((section ("__DATA, __interpose"))) = { (const void*)(unsigned long)&_replacement, (const void*)(unsigned long)&_original };
 
-          // 1. 🌊 صيد كل دالة تبدأ بحرف (A-Z, a-z, أو _) مع الأوفست
+          // 1. 🌊 صيد الدوال والأوفستات
           void* hk_dlsym(void* handle, const char* symbol) {
-              void* result = dlsym(handle, symbol); // الحصول على الأوفست الحقيقي
+              void* result = dlsym(handle, symbol); 
               
               if (isTracerActive && symbol && result) {
                   char first = symbol[0];
-                  // فلتر: اقبل فقط الحروف الإنجليزية أو علامة الـ (_)
                   if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z') || first == '_') {
-                      
-                      NSString *color = @"#00ffff"; // سماوي للفيضان
+                      NSString *color = @"#00ffff"; 
                       NSString *cat = @"Symbol 🌊";
 
-                      // تمييز الدوال الخطرة جداً
                       if (strstr(symbol, "inline_hook") || strstr(symbol, "ms_") || strstr(symbol, "ptrace")) {
                           color = @"red"; cat = @"CRITICAL 💀";
                       } else if (strstr(symbol, "sysctl") || strstr(symbol, "syscall")) {
                           color = @"orange"; cat = @"HIGH ⚠️";
                       }
 
-                      // طباعة اسم الدالة + الأوفست
                       NSString *msg = [NSString stringWithFormat:@"%s | Offset: %p", symbol, result];
                       Queue_Log(cat, msg, color);
                   }
@@ -105,7 +100,7 @@ jobs:
               }
               if (isTracerActive && path) {
                   NSString *msg = [NSString stringWithFormat:@"%s", path];
-                  NSString *color = @"#ff00ff"; // وردي
+                  NSString *color = @"#ff00ff"; 
                   if (strstr(path, "tss_ano") || strstr(path, "comm.dat")) color = @"red";
                   Queue_Log(@"File 📁", msg, color);
               }
@@ -119,26 +114,32 @@ jobs:
               logBuffer = [[NSMutableArray alloc] init];
               bufferLock = [[NSLock alloc] init];
               
-              // ⏱️ صمام الأمان: 30 ثانية لتجنب كراش الإقلاع
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                   isTracerActive = YES;
-                  StartBatchSender(); // تشغيل محرك الإرسال المجمع
-                  Queue_Log(@"SYSTEM 🚀", @"V91 Ultimate Flood Active - بوابات الماتريكس فُتحت بنجاح!", @"#00ff00");
+                  StartBatchSender(); 
+                  
+                  // 🧮 [الـ Base Address] - استخراج العنوان الأساسي وإرساله
+                  intptr_t aslr_slide = _dyld_get_image_vmaddr_slide(0);
+                  const struct mach_header *base_address = _dyld_get_image_header(0);
+                  
+                  NSString *baseMsg = [NSString stringWithFormat:@"Base Address: %p | ASLR Slide: 0x%lx", base_address, aslr_slide];
+                  
+                  Queue_Log(@"SYSTEM 🚀", @"V92 Ultimate Matrix Active - بوابات الماتريكس فُتحت بنجاح!", @"#00ff00");
+                  Queue_Log(@"BASE ADDR 🧮", baseMsg, @"#00ff00");
               });
           }
           EOF
 
-      - name: Build V91 Tracer
+      - name: Build V92 Tracer
         run: |
           clang++ -dynamiclib -std=c++11 -x objective-c++ \
           -target arm64-apple-ios14.0 \
           -isysroot $(xcrun --sdk iphoneos --show-sdk-path) \
-          -arch arm64 jni/main.mm -o ImperialV91.dylib \
+          -arch arm64 jni/main.mm -o ImperialV92.dylib \
           -framework Foundation -lobjc
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Imperial-V91-UltimateFlood
-          path: ImperialV91.dylib
-          
+          name: Imperial-V92-FullBase
+          path: ImperialV92.dylib
