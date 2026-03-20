@@ -1,39 +1,30 @@
-name: Masoud Ultimate Melt Build
+name: Masoud Final Fix Build
 
 on:
-  workflow_dispatch: # هذا يخلي الزر يطلعلك حتى تشغله بيدك
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build_job:
+  build:
     runs-on: macos-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Environment
+      - name: Setup Files
         run: |
-          mkdir -p Project
-          cd Project
-          # تحميل ملفات الربط
+          # تحميل الملفات الأساسية
           curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.h
           curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.c
-
-      - name: Python Melt Logic
-        run: |
-          cd Project
+          
+          # سكريبت الصهر (تأكدت من إضافة كل الرموز)
           python3 - << 'EOF'
           def melt(text, key=0x55):
               return ", ".join([hex(ord(c) ^ key) for c in text]) + ", 0x0"
           
-          # صهر الكلمات الحساسة
-          data = {
-              "S_BYPASS": "ShadowBypass",
-              "S_DLSYM": "dlsym",
-              "S_PTRACE": "ptrace"
-          }
+          data = {"S_BYPASS": "ShadowBypass", "S_DLSYM": "dlsym"}
           with open("Melted.h", "w") as f:
               f.write("#ifndef MELTED_H\n#define MELTED_H\n")
               for k, v in data.items():
@@ -43,14 +34,17 @@ jobs:
 
       - name: Create Tweak Code
         run: |
-          cat << 'EOF' > Project/Tweak.mm
+          cat << 'EOF' > Tweak.mm
           #import <Foundation/Foundation.h>
           #import <mach-o/dyld.h>
           #import <sys/mman.h>
           #import <dlfcn.h>
+          #import <stdlib.h>
+          #import <unistd.h>
           #import "fishhook.h"
           #import "Melted.h"
 
+          // دالة فك التشفير
           char* decrypt(const unsigned char* in) {
               size_t l=0; while(in[l]!=0x0) l++;
               char* o=(char*)malloc(l+1);
@@ -58,34 +52,41 @@ jobs:
               o[l]='\0'; return o;
           }
 
-          void patch(uint64_t off) {
-              intptr_t s = _dyld_get_image_vmaddr_slide(0);
-              uintptr_t a = s + 0x100000000 + off;
+          // دالة الباتش للذاكرة
+          void patch(uintptr_t address) {
               size_t ps = sysconf(_SC_PAGESIZE);
-              mprotect((void*)(a & ~(ps-1)), ps, 7);
-              memcpy((void*)a, "\x1F\x20\x03\xD5", 4);
+              uintptr_t start = address & ~(ps - 1);
+              if (mprotect((void*)start, ps, PROT_READ | PROT_WRITE | PROT_EXEC) == 0) {
+                  memcpy((void*)address, "\x1F\x20\x03\xD5", 4);
+              }
           }
 
           __attribute__((constructor)) static void init() {
-              dispatch_after(dispatch_time(0, 20LL*1000000000LL), dispatch_get_main_queue(), ^{
-                  patch(0x68F2720); 
-                  NSLog(@"[+] Masoud Melted Bypass Injected!");
+              // تأخير 20 ثانية
+              dispatch_after(dispatch_after_time(DISPATCH_TIME_NOW, 20LL * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  intptr_t slide = _dyld_get_image_vmaddr_slide(0);
+                  
+                  // تطبيق الباتشات بالأوفستات الخاصة بك
+                  patch(slide + 0x100000000 + 0x68F2720); 
+                  patch(slide + 0x100000000 + 0x68F0BC0);
+                  
+                  NSLog(@"[+] Masoud Bypass Applied Successfully!");
               });
           }
           EOF
 
-      - name: Xcode Clang Compile
+      - name: Compile with Xcode Clang++
         run: |
-          cd Project
-          xcrun -sdk iphoneos clang -dynamiclib -arch arm64 \
+          # استخدام clang++ لضمان توافق الـ Objective-C++
+          xcrun -sdk iphoneos clang++ -dynamiclib -arch arm64 \
             -miphoneos-version-min=12.0 -O3 -flto \
+            -fobjc-arc -lc++ \
             -Wl,-dead_strip -Wl,-x \
             Tweak.mm fishhook.c -o MasoudBypass.dylib \
-            -framework Foundation -I.
+            -framework Foundation -framework UIKit -I.
 
-      - name: Upload Output
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Masoud-Dylib
-          path: Project/*.dylib
-          
+          name: Masoud-Dylib-Final
+          path: "*.dylib"
