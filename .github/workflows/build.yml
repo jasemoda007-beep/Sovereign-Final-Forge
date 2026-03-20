@@ -1,4 +1,4 @@
-name: Build Ultimate ShadowBypass
+.name: Build Ultimate ShadowBypass
 
 on:
   workflow_dispatch: # يخليك تشغل البناء بضغطة زر من صفحة Actions
