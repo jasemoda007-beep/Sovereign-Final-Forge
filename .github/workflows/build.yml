@@ -1,144 +1,124 @@
-name: Build Masoud Ultimate Bypass
+name: Build Masoud Encrypted Bypass
 
 on:
-  workflow_dispatch: # تشغيل يدوي
+  workflow_dispatch:
 
-# حل مشكلة تحذير Node.js 20 وتفعيل الإصدار 24 الجديد
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build_job:
+  build:
     runs-on: macos-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install & Setup Theos
-        uses: theos/setup-theos@v2
+      - name: Setup Python (The Melter)
+        uses: actions/setup-python@v5
         with:
-          arch: arm64
+          python-version: '3.x'
 
-      - name: Prepare Bypass Project Structure
+      - name: Create Project & Melt Strings
         run: |
-          mkdir -p MasoudBypass
-          cd MasoudBypass
+          mkdir -p MasoudProject
+          cd MasoudProject
           
-          # 1. جلب مكتبة fishhook للعمليات العكسية
+          # تحميل fishhook
           curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.h
           curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.c
-          
-          # 2. إنشاء ملف الـ Control (بيانات الحزمة)
-          cat << 'EOF' > control
-          Package: com.masoud.ultimate.bypass
-          Name: MasoudShadowBypass
-          Depends: mobilesubstrate
-          Version: 1.0.0
-          Architecture: iphoneos-arm
-          Description: Advanced Security Bypass by Masoud
-          Maintainer: Masoud
-          Author: Masoud
-          Section: Tweaks
+
+          # سكريبت بايثون لـ "صهر" النصوص الحساسة
+          python3 - << 'EOF'
+          def melt_string(plain, key=0x55):
+              return ", ".join([hex(ord(c) ^ key) for c in plain]) + ", 0x0"
+
+          targets = {
+              "STR_CYDIA": "Cydia",
+              "STR_SUBSTRATE": "MobileSubstrate",
+              "STR_BYPASS": "ShadowBypass",
+              "STR_DLSYM": "dlsym",
+              "STR_PTRACE": "ptrace"
+          }
+
+          with open("MeltedStrings.h", "w") as f:
+              f.write("#ifndef MELTED_H\n#define MELTED_H\n")
+              for name, val in targets.items():
+                  f.write(f"static const unsigned char {name}[] = {{ {melt_string(val)} }};\n")
+              f.write("#endif")
           EOF
 
-          # 3. إنشاء الـ Makefile (إعدادات البناء)
-          cat << 'EOF' > Makefile
-          ARCHS = arm64
-          TARGET = iphone:clang:latest:14.0
-          include $(THEOS)/makefiles/common.mk
-
-          TWEAK_NAME = ShadowBypass
-          ShadowBypass_FILES = Tweak.xm fishhook.c
-          ShadowBypass_CFLAGS = -fobjc-arc
-
-          include $(THEOS_MAKE_PATH)/tweak.mk
-          EOF
-          
-          # 4. إنشاء ملف فلتر التطبيق (Target)
-          cat << 'EOF' > ShadowBypass.plist
-          { Filter = { Bundles = ( "com.tencent.ig" ); }; }
-          EOF
-          
-          # 5. كتابة كود التويك (Tweak.xm) المطور
-          cat << 'EOF' > Tweak.xm
+          # كتابة كود التويك (Tweak.mm) مع كود فك الصهر
+          cat << 'EOF' > Tweak.mm
           #import <Foundation/Foundation.h>
           #import <mach-o/dyld.h>
           #import <sys/mman.h>
-          #import <string.h>
           #import <dlfcn.h>
           #import "fishhook.h"
+          #import "MeltedStrings.h"
 
-          // دالة لتعديل الذاكرة مباشرة (Memory Patching)
-          void patch_memory(uint64_t offset) {
+          // دالة فك الصهر في الذاكرة الحية
+          // المعادلة: $P = C \oplus K$
+          char* unmelt(const unsigned char* input) {
+              size_t len = 0;
+              while(input[len] != 0x0) len++;
+              char* out = (char*)malloc(len + 1);
+              for(size_t i=0; i<len; i++) out[i] = input[i] ^ 0x55;
+              out[len] = '\0';
+              return out;
+          }
+
+          void apply_patch(uint64_t offset) {
               intptr_t slide = _dyld_get_image_vmaddr_slide(0);
-              uintptr_t address = slide + 0x100000000 + offset;
-              size_t pagesize = sysconf(_SC_PAGESIZE);
-              uintptr_t start = address & ~(pagesize - 1);
-              mprotect((void*)start, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC);
-              unsigned char nop[] = {0x1F, 0x20, 0x03, 0xD5}; // NOP Instruction
-              memcpy((void*)address, nop, 4);
+              uintptr_t addr = slide + 0x100000000 + offset;
+              size_t psize = sysconf(_SC_PAGESIZE);
+              uintptr_t start = addr & ~(psize - 1);
+              mprotect((void*)start, psize, PROT_READ | PROT_WRITE | PROT_EXEC);
+              unsigned char nop[] = {0x1F, 0x20, 0x03, 0xD5};
+              memcpy((void*)addr, nop, 4);
           }
 
           static void* (*orig_dlsym)(void* handle, const char* symbol);
           
-          // تزوير اسم الصورة المسؤولة عن الهاك
-          const char* hooked_get_image_name(uint32_t index) {
-              const char *name = _dyld_get_image_name(index); 
-              if (name && (strstr(name, "ShadowBypass") || strstr(name, "Cydia") || strstr(name, "Substrate"))) {
-                  return "/usr/lib/system/libdyld.dylib"; 
-              }
-              return name;
-          }
-
-          // تزوير الهيدر (Header) لمنع اكتشاف البصمة
-          const struct mach_header* hooked_get_image_header(uint32_t index) {
-              const char *name = _dyld_get_image_name(index);
-              if (name && (strstr(name, "ShadowBypass") || strstr(name, "Cydia"))) {
-                  return _dyld_get_image_header(0); 
-              }
-              return _dyld_get_image_header(index);
-          }
-
-          // هوك لـ dlsym للتحكم في الطلبات الخارجية
           void* hooked_dlsym(void* handle, const char* symbol) {
               if (symbol) {
-                  if (strcmp(symbol, "_dyld_get_image_name") == 0) return (void*)hooked_get_image_name;
-                  if (strcmp(symbol, "_dyld_get_image_header") == 0) return (void*)hooked_get_image_header;
+                  char* sym_bypass = unmelt(STR_BYPASS);
+                  if (strstr(symbol, sym_bypass)) {
+                      free(sym_bypass);
+                      return NULL;
+                  }
+                  free(sym_bypass);
               }
               return orig_dlsym(handle, symbol);
           }
 
-          __attribute__((constructor)) static void init_masoud_bypass() {
-              // الانتظار 20 ثانية لتجاوز فحوصات البداية
+          __attribute__((constructor)) static void init() {
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  apply_patch(0x68F2720);
                   
-                  // تفعيل الباتشات للأوفستات
-                  patch_memory(0x68F2720); 
-                  patch_memory(0x68F0BC0); 
-                  
-                  // إعادة ربط الرموز (Symbol Rebinding)
+                  char* dlsym_name = unmelt(STR_DLSYM);
                   struct rebinding rebs[] = {
-                      {"dlsym", (void *)hooked_dlsym, (void **)&orig_dlsym}
+                      {dlsym_name, (void *)hooked_dlsym, (void **)&orig_dlsym}
                   };
                   rebind_symbols(rebs, 1);
-                  
-                  NSLog(@"[+] Masoud Ultimate Bypass Active!");
+                  free(dlsym_name);
               });
           }
           EOF
 
-      - name: Perform Compilation
+      - name: Build with Xcode Toolchain
         run: |
-          cd MasoudBypass
-          make FINALPACKAGE=1
-          
-          # إنشاء مجلد خارجي للمخرجات لسهولة الرفع
-          mkdir -p ../build_output
-          find .theos/obj -name "*.dylib" -exec cp {} ../build_output/ \;
+          cd MasoudProject
+          # استخدام clang مباشرة (محرك Xcode) مع أعلى مستويات التجريد والحماية
+          xcrun -sdk iphoneos clang -dynamiclib -arch arm64 \
+            -miphoneos-version-min=12.0 \
+            -O3 -flto -fobjc-arc \
+            -Wl,-dead_strip -Wl,-x \
+            Tweak.mm fishhook.c -o MasoudBypass.dylib \
+            -framework Foundation -I.
 
-      - name: Upload Final Dylib
+      - name: Upload Melted Dylib
         uses: actions/upload-artifact@v4
         with:
-          name: Masoud-Ultimate-Bypass
-          path: build_output/*.dylib
+          name: Masoud-Melted-Bypass
+          path: MasoudProject/*.dylib
           
