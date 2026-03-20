@@ -1,0 +1,91 @@
+name: Masoud Ultimate Melt Build
+
+on:
+  workflow_dispatch: # هذا يخلي الزر يطلعلك حتى تشغله بيدك
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build_job:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Environment
+        run: |
+          mkdir -p Project
+          cd Project
+          # تحميل ملفات الربط
+          curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.h
+          curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.c
+
+      - name: Python Melt Logic
+        run: |
+          cd Project
+          python3 - << 'EOF'
+          def melt(text, key=0x55):
+              return ", ".join([hex(ord(c) ^ key) for c in text]) + ", 0x0"
+          
+          # صهر الكلمات الحساسة
+          data = {
+              "S_BYPASS": "ShadowBypass",
+              "S_DLSYM": "dlsym",
+              "S_PTRACE": "ptrace"
+          }
+          with open("Melted.h", "w") as f:
+              f.write("#ifndef MELTED_H\n#define MELTED_H\n")
+              for k, v in data.items():
+                  f.write(f"static const unsigned char {k}[] = {{ {melt(v)} }};\n")
+              f.write("#endif")
+          EOF
+
+      - name: Create Tweak Code
+        run: |
+          cat << 'EOF' > Project/Tweak.mm
+          #import <Foundation/Foundation.h>
+          #import <mach-o/dyld.h>
+          #import <sys/mman.h>
+          #import <dlfcn.h>
+          #import "fishhook.h"
+          #import "Melted.h"
+
+          char* decrypt(const unsigned char* in) {
+              size_t l=0; while(in[l]!=0x0) l++;
+              char* o=(char*)malloc(l+1);
+              for(size_t i=0;i<l;i++) o[i]=in[i]^0x55;
+              o[l]='\0'; return o;
+          }
+
+          void patch(uint64_t off) {
+              intptr_t s = _dyld_get_image_vmaddr_slide(0);
+              uintptr_t a = s + 0x100000000 + off;
+              size_t ps = sysconf(_SC_PAGESIZE);
+              mprotect((void*)(a & ~(ps-1)), ps, 7);
+              memcpy((void*)a, "\x1F\x20\x03\xD5", 4);
+          }
+
+          __attribute__((constructor)) static void init() {
+              dispatch_after(dispatch_time(0, 20LL*1000000000LL), dispatch_get_main_queue(), ^{
+                  patch(0x68F2720); 
+                  NSLog(@"[+] Masoud Melted Bypass Injected!");
+              });
+          }
+          EOF
+
+      - name: Xcode Clang Compile
+        run: |
+          cd Project
+          xcrun -sdk iphoneos clang -dynamiclib -arch arm64 \
+            -miphoneos-version-min=12.0 -O3 -flto \
+            -Wl,-dead_strip -Wl,-x \
+            Tweak.mm fishhook.c -o MasoudBypass.dylib \
+            -framework Foundation -I.
+
+      - name: Upload Output
+        uses: actions/upload-artifact@v4
+        with:
+          name: Masoud-Dylib
+          path: Project/*.dylib
+          
