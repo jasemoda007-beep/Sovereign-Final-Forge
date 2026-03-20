@@ -1,1 +1,141 @@
+name: Build Ultimate ShadowBypass
 
+on:
+  workflow_dispatch: # يخليك تشغل البناء بضغطة زر من صفحة Actions
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Setup Theos
+        uses: theos/setup-theos@v2
+
+      - name: Create Workspace & Download Fishhook
+        run: |
+          mkdir -p bypass_project
+          cd bypass_project
+          
+          echo "Downloading fishhook..."
+          curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.h
+          curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.c
+          
+          echo "Creating Makefile..."
+          cat << 'EOF' > Makefile
+          ARCHS = arm64
+          TARGET = iphone:clang:latest:12.0
+          INSTALL_TARGET_PROCESSES = ShadowTrackerExtra
+          include $(THEOS)/makefiles/common.mk
+          TWEAK_NAME = ShadowBypass
+          ShadowBypass_FILES = Tweak.xm fishhook.c
+          ShadowBypass_CFLAGS = -fobjc-arc
+          include $(THEOS_MAKE_PATH)/tweak.mk
+          EOF
+          
+          echo "Creating Plist filter..."
+          cat << 'EOF' > ShadowBypass.plist
+          { Filter = { Bundles = ( "com.tencent.ig" ); }; }
+          EOF
+          
+          echo "Creating Source Code (Tweak.xm)..."
+          cat << 'EOF' > Tweak.xm
+          #import <Foundation/Foundation.h>
+          #import <mach-o/dyld.h>
+          #import <sys/mman.h>
+          #import <string.h>
+          #import <dlfcn.h>
+          #import "fishhook.h"
+
+          // ==========================================
+          // 🛠️ دالة التعديل على الذاكرة الحية (Live Memory Patcher)
+          // ==========================================
+          void apply_memory_patch(uint64_t ida_offset) {
+              // حساب العنوان الحقيقي مع الـ ASLR Slide
+              intptr_t slide = _dyld_get_image_vmaddr_slide(0);
+              uintptr_t target_addr = slide + 0x100000000 + ida_offset;
+              
+              // فك حماية الذاكرة (منع الكراش)
+              size_t page_size = sysconf(_SC_PAGESIZE);
+              uintptr_t page_start = target_addr & ~(page_size - 1);
+              mprotect((void*)page_start, page_size, PROT_READ | PROT_WRITE | PROT_EXEC);
+              
+              // كتابة كود الـ NOP (1F 20 03 D5) بالذاكرة
+              unsigned char nop_bytes[] = {0x1F, 0x20, 0x03, 0xD5};
+              memcpy((void*)target_addr, nop_bytes, 4);
+          }
+
+          // ==========================================
+          // 🛡️ دوال الهوك لـ dlsym (خداع الحماية الشامل)
+          // ==========================================
+          static void* (*original_dlsym)(void* handle, const char* symbol);
+          
+          // 1. تزوير الاسم
+          const char* fake_dyld_get_image_name(uint32_t image_index) {
+              const char *real_name = _dyld_get_image_name(image_index); 
+              if (real_name && (strstr(real_name, "ShadowBypass") || strstr(real_name, "MobileSubstrate") || strstr(real_name, "Cydia"))) {
+                  return "/usr/lib/system/libdyld.dylib"; // نعطيه اسم نظامي
+              }
+              return real_name;
+          }
+
+          // 2. تزوير البصمة (Header) - الضربة القاضية!
+          const struct mach_header* fake_dyld_get_image_header(uint32_t image_index) {
+              const char *real_name = _dyld_get_image_name(image_index);
+              if (real_name && (strstr(real_name, "ShadowBypass") || strstr(real_name, "MobileSubstrate") || strstr(real_name, "Cydia"))) {
+                  // إذا طلب بصمة الهاك مالتك، نعطيه بصمة الملف رقم 0 (اللي هو اللعبة نفسها)
+                  return _dyld_get_image_header(0); 
+              }
+              return _dyld_get_image_header(image_index);
+          }
+          
+          // 3. تزوير البحث عن فريدا وأخواتها
+          char* fake_strstr(const char *haystack, const char *needle) {
+              if (needle && (strcmp(needle, "frida") == 0 || strcmp(needle, "Cydia") == 0 || strcmp(needle, "Substrate") == 0)) {
+                  return NULL; // نكول للعبة: ماكو هيج شي!
+              }
+              return strstr(haystack, needle);
+          }
+          
+          // 🎯 الهوك المركزي للوسيط dlsym
+          void* hooked_dlsym(void* handle, const char* symbol) {
+              if (symbol) {
+                  if (strcmp(symbol, "_dyld_get_image_name") == 0) return (void*)fake_dyld_get_image_name;
+                  if (strcmp(symbol, "_dyld_get_image_header") == 0) return (void*)fake_dyld_get_image_header;
+                  if (strcmp(symbol, "strstr") == 0) return (void*)fake_strstr;
+              }
+              return original_dlsym(handle, symbol);
+          }
+
+          // ==========================================
+          // ⏳ التشغيل المخفي بعد 20 ثانية (Delayed Execution)
+          // ==========================================
+          __attribute__((constructor)) static void setup_all_bypass() {
+              // الانتظار 20 ثانية بالخفاء حتى اللعبة تكمل فحوصات البداية (فحص النزاهة)
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  
+                  // 1. ضرب الأوفستات الحية بالذاكرة (NOP)
+                  apply_memory_patch(0x68F2720); // _strstr
+                  apply_memory_patch(0x68F0BC0); // _dladdr
+                  apply_memory_patch(0x68F2BB8); // _task_info
+                  
+                  // 2. تشغيل الهوك العكسي
+                  struct rebinding rebindings[] = {
+                      {"dlsym", hooked_dlsym, (void *)&original_dlsym}
+                  };
+                  rebind_symbols(rebindings, 1);
+                  
+                  NSLog(@"[+] Masoud Ultimate Bypass Injected Successfully!");
+              });
+          }
+          EOF
+          
+      - name: Compile Dylib
+        run: |
+          cd bypass_project
+          make FINALPACKAGE=1
+          
+      - name: Upload Dylib Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Masoud-Ultimate-Dylib
+          path: bypass_project/.theos/obj/**/*.dylib
+          
