@@ -1,51 +1,50 @@
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  
-
-name: Build Ultimate ShadowBypass
+name: Build Masoud Ultimate Bypass
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # تشغيل يدوي
+
+# حل مشكلة تحذير Node.js 20 وتفعيل الإصدار 24 الجديد
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  build:
+  build_job:
     runs-on: macos-latest
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Theos
+      - name: Install & Setup Theos
         uses: theos/setup-theos@v2
         with:
           arch: arm64
 
-      - name: Create Project Files
+      - name: Prepare Bypass Project Structure
         run: |
-          mkdir -p bypass_project
-          cd bypass_project
+          mkdir -p MasoudBypass
+          cd MasoudBypass
           
-          # تحميل ملفات fishhook
+          # 1. جلب مكتبة fishhook للعمليات العكسية
           curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.h
           curl -sO https://raw.githubusercontent.com/facebook/fishhook/main/fishhook.c
           
-          # إنشاء ملف الـ Control (ضروري جداً لعمل Theos)
+          # 2. إنشاء ملف الـ Control (بيانات الحزمة)
           cat << 'EOF' > control
-          Package: com.masoud.shadowbypass
-          Name: ShadowBypass
+          Package: com.masoud.ultimate.bypass
+          Name: MasoudShadowBypass
           Depends: mobilesubstrate
           Version: 1.0.0
           Architecture: iphoneos-arm
-          Description: Ultimate Bypass for ShadowTracker
+          Description: Advanced Security Bypass by Masoud
           Maintainer: Masoud
           Author: Masoud
           Section: Tweaks
           EOF
 
-          # إنشاء الـ Makefile
+          # 3. إنشاء الـ Makefile (إعدادات البناء)
           cat << 'EOF' > Makefile
           ARCHS = arm64
-          # استخدام SDK متوفر في بيئة GitHub
-          TARGET = iphone:clang:latest:14.0 
+          TARGET = iphone:clang:latest:14.0
           include $(THEOS)/makefiles/common.mk
 
           TWEAK_NAME = ShadowBypass
@@ -55,12 +54,12 @@ jobs:
           include $(THEOS_MAKE_PATH)/tweak.mk
           EOF
           
-          # إنشاء Plist الفلتر
+          # 4. إنشاء ملف فلتر التطبيق (Target)
           cat << 'EOF' > ShadowBypass.plist
           { Filter = { Bundles = ( "com.tencent.ig" ); }; }
           EOF
           
-          # كتابة كود الـ Tweak.xm (نفس كودك الأصلي)
+          # 5. كتابة كود التويك (Tweak.xm) المطور
           cat << 'EOF' > Tweak.xm
           #import <Foundation/Foundation.h>
           #import <mach-o/dyld.h>
@@ -69,75 +68,77 @@ jobs:
           #import <dlfcn.h>
           #import "fishhook.h"
 
-          void apply_memory_patch(uint64_t ida_offset) {
+          // دالة لتعديل الذاكرة مباشرة (Memory Patching)
+          void patch_memory(uint64_t offset) {
               intptr_t slide = _dyld_get_image_vmaddr_slide(0);
-              uintptr_t target_addr = slide + 0x100000000 + ida_offset;
-              size_t page_size = sysconf(_SC_PAGESIZE);
-              uintptr_t page_start = target_addr & ~(page_size - 1);
-              mprotect((void*)page_start, page_size, PROT_READ | PROT_WRITE | PROT_EXEC);
-              unsigned char nop_bytes[] = {0x1F, 0x20, 0x03, 0xD5};
-              memcpy((void*)target_addr, nop_bytes, 4);
+              uintptr_t address = slide + 0x100000000 + offset;
+              size_t pagesize = sysconf(_SC_PAGESIZE);
+              uintptr_t start = address & ~(pagesize - 1);
+              mprotect((void*)start, pagesize, PROT_READ | PROT_WRITE | PROT_EXEC);
+              unsigned char nop[] = {0x1F, 0x20, 0x03, 0xD5}; // NOP Instruction
+              memcpy((void*)address, nop, 4);
           }
 
-          static void* (*original_dlsym)(void* handle, const char* symbol);
+          static void* (*orig_dlsym)(void* handle, const char* symbol);
           
-          const char* fake_dyld_get_image_name(uint32_t image_index) {
-              const char *real_name = _dyld_get_image_name(image_index); 
-              if (real_name && (strstr(real_name, "ShadowBypass") || strstr(real_name, "MobileSubstrate") || strstr(real_name, "Cydia"))) {
-                  return "/usr/lib/system/libdyld.dylib";
+          // تزوير اسم الصورة المسؤولة عن الهاك
+          const char* hooked_get_image_name(uint32_t index) {
+              const char *name = _dyld_get_image_name(index); 
+              if (name && (strstr(name, "ShadowBypass") || strstr(name, "Cydia") || strstr(name, "Substrate"))) {
+                  return "/usr/lib/system/libdyld.dylib"; 
               }
-              return real_name;
+              return name;
           }
 
-          const struct mach_header* fake_dyld_get_image_header(uint32_t image_index) {
-              const char *real_name = _dyld_get_image_name(image_index);
-              if (real_name && (strstr(real_name, "ShadowBypass") || strstr(real_name, "MobileSubstrate") || strstr(real_name, "Cydia"))) {
+          // تزوير الهيدر (Header) لمنع اكتشاف البصمة
+          const struct mach_header* hooked_get_image_header(uint32_t index) {
+              const char *name = _dyld_get_image_name(index);
+              if (name && (strstr(name, "ShadowBypass") || strstr(name, "Cydia"))) {
                   return _dyld_get_image_header(0); 
               }
-              return _dyld_get_image_header(image_index);
-          }
-          
-          char* fake_strstr(const char *haystack, const char *needle) {
-              if (needle && (strcmp(needle, "frida") == 0 || strcmp(needle, "Cydia") == 0 || strcmp(needle, "Substrate") == 0)) {
-                  return NULL;
-              }
-              return strstr(haystack, needle);
-          }
-          
-          void* hooked_dlsym(void* handle, const char* symbol) {
-              if (symbol) {
-                  if (strcmp(symbol, "_dyld_get_image_name") == 0) return (void*)fake_dyld_get_image_name;
-                  if (strcmp(symbol, "_dyld_get_image_header") == 0) return (void*)fake_dyld_get_image_header;
-                  if (strcmp(symbol, "strstr") == 0) return (void*)fake_strstr;
-              }
-              return original_dlsym(handle, symbol);
+              return _dyld_get_image_header(index);
           }
 
-          __attribute__((constructor)) static void setup_all_bypass() {
+          // هوك لـ dlsym للتحكم في الطلبات الخارجية
+          void* hooked_dlsym(void* handle, const char* symbol) {
+              if (symbol) {
+                  if (strcmp(symbol, "_dyld_get_image_name") == 0) return (void*)hooked_get_image_name;
+                  if (strcmp(symbol, "_dyld_get_image_header") == 0) return (void*)hooked_get_image_header;
+              }
+              return orig_dlsym(handle, symbol);
+          }
+
+          __attribute__((constructor)) static void init_masoud_bypass() {
+              // الانتظار 20 ثانية لتجاوز فحوصات البداية
               dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  apply_memory_patch(0x68F2720); 
-                  apply_memory_patch(0x68F0BC0); 
-                  apply_memory_patch(0x68F2BB8); 
-                  struct rebinding rebindings[] = {
-                      {"dlsym", (void *)hooked_dlsym, (void **)&original_dlsym}
+                  
+                  // تفعيل الباتشات للأوفستات
+                  patch_memory(0x68F2720); 
+                  patch_memory(0x68F0BC0); 
+                  
+                  // إعادة ربط الرموز (Symbol Rebinding)
+                  struct rebinding rebs[] = {
+                      {"dlsym", (void *)hooked_dlsym, (void **)&orig_dlsym}
                   };
-                  rebind_symbols(rebindings, 1);
-                  NSLog(@"[+] Masoud Ultimate Bypass Injected!");
+                  rebind_symbols(rebs, 1);
+                  
+                  NSLog(@"[+] Masoud Ultimate Bypass Active!");
               });
           }
           EOF
 
-      - name: Compile
+      - name: Perform Compilation
         run: |
-          cd bypass_project
+          cd MasoudBypass
           make FINALPACKAGE=1
-          # نقل الملف لمكان واضح للرفع
-          mkdir -p ../output
-          cp .theos/obj/debug/*.dylib ../output/ 2>/dev/null || cp .theos/obj/*.dylib ../output/
+          
+          # إنشاء مجلد خارجي للمخرجات لسهولة الرفع
+          mkdir -p ../build_output
+          find .theos/obj -name "*.dylib" -exec cp {} ../build_output/ \;
 
-      - name: Upload Artifact
+      - name: Upload Final Dylib
         uses: actions/upload-artifact@v4
         with:
-          name: Masoud-Bypass-Dylib
-          path: output/*.dylib
+          name: Masoud-Ultimate-Bypass
+          path: build_output/*.dylib
           
